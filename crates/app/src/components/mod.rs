@@ -1,1 +1,6 @@
-//! Reusable UI components (columns, cards, dialogs). Empty until the UI design is decided.
+//! Reusable UI components: badges and pills, the three board tabs (epic list, kanban,
+//! timeline), the item dialog and toasts.
+
+pub mod icons;
+pub mod toast;
+pub mod widgets;
