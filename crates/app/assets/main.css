@@ -266,6 +266,12 @@ main.panel { padding-top: 24px; padding-bottom: 48px; display: flex; flex-direct
 .slot { height: 0; border-radius: 10px; border: 2px dashed rgba(124, 155, 255, .55); background: rgba(124, 155, 255, .06); animation: slotOpen .22s var(--ease) forwards; }
 .col-tail { flex: 1 1 auto; min-height: 36px; border-radius: 8px; }
 .col .empty { padding: 18px 8px; font-size: 13px; }
+.close-zone { flex: 1 1 auto; min-height: 160px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 16px; border-radius: 10px; border: 2px dashed var(--line-strong); color: var(--faint); text-align: center; font-size: 12px; transition: border-color .15s, background .15s, color .15s; }
+.close-zone strong { color: var(--text-2); font-size: 14px; font-weight: 600; }
+.close-zone .ico { color: var(--faint); transition: transform .2s var(--spring), color .15s; }
+.close-zone.over { border-color: #339933; background: rgba(51, 153, 51, .12); color: #A6E6BE; }
+.close-zone.over strong, .close-zone.over .ico { color: #A6E6BE; }
+.close-zone.over .ico { transform: scale(1.2); }
 .note { padding: 14px 16px; border-radius: 10px; border: 1px solid var(--line-strong); background: var(--panel); color: var(--text-2); display: flex; align-items: center; gap: 12px; }
 .note.err { border-color: #6A2A30; background: #22161A; color: var(--danger); }
 

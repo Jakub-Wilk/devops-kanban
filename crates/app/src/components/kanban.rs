@@ -1,6 +1,7 @@
 //! "Kanban" tab: the team's real board for one backlog level (columns, WIP limits, swimlanes
 //! and state mappings from ADO), with a Features/Stories switcher, a Columns menu to hide
-//! columns, epic, assignee and area filters (all saved per board), each card's tasks as a
+//! columns, epic, assignee and area filters (all saved per board), the done column as a drop zone
+//! that closes items instead of a list of them, each card's tasks as a
 //! checklist, 7pace time tracking per card, and drag-and-drop between and within
 //! columns.
 
@@ -473,6 +474,14 @@ fn ColumnCell(
     let lane_for_tail = lane_id.clone();
     let board_for_drop = board_name.clone();
     let empty = cards.iter().all(|c| Some(c.id) == dragging);
+    // The done (Outgoing) column doesn't list its items: dropping on it closes one.
+    let closing = column.kind == kanban_core::ColumnKind::Outgoing;
+    let zone_class = if here.is_some() && incoming {
+        "close-zone over"
+    } else {
+        "close-zone"
+    };
+    let window = kanban_core::queries::COMPLETED_WINDOW_DAYS;
     rsx! {
         section {
             class: "{class}",
@@ -490,7 +499,14 @@ fn ColumnCell(
                 e.prevent_default();
                 finish_drop(st, &board_for_drop, &col_for_drop, lane_for_drop.clone());
             },
-            for (i, card) in cards.into_iter().enumerate() {
+            if closing {
+                div { class: "{zone_class}",
+                    Icon { svg: icons::CHECK }
+                    strong { if here.is_some() && incoming { "Release to close" } else { "Drop here to close" } }
+                    span { "data-tip": "Closed items stay listed on the List and Timeline", "{total} closed in the last {window} days" }
+                }
+            }
+            for (i, card) in cards.into_iter().enumerate().filter(|_| !closing) {
                 Fragment { key: "{card.id}",
                 if before == Some(Some(card.id)) && dragging != Some(card.id) {
                     div { class: "slot" }
@@ -509,7 +525,7 @@ fn ColumnCell(
             if before == Some(None) {
                 div { class: "slot" }
             }
-            if empty && before.is_none() {
+            if empty && before.is_none() && !closing {
                 p { class: "empty", "Nothing here" }
             }
             div {

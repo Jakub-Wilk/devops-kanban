@@ -52,6 +52,7 @@ icon!(
 icon!(PLUS, "16", "2.4", "<path d=\"M12 5v14M5 12h14\"/>");
 icon!(PLUS_14, "14", "2.4", "<path d=\"M12 5v14M5 12h14\"/>");
 icon!(MINUS, "16", "2.4", "<path d=\"M5 12h14\"/>");
+icon!(CHECK, "22", "2.2", "<path d=\"M5 12.5l4.5 4.5L19 7.5\"/>");
 icon!(PLAY, "14", "2.2", "<path d=\"M7 4.5v15l12.5-7.5z\"/>");
 icon!(
     STOP,
