@@ -35,10 +35,6 @@ pub fn Setup() -> Element {
     rsx! {
         div { class: "center",
             div { class: "setup",
-                div { class: "brand",
-                    span { class: "ico", dangerous_inner_html: icons::LOGO }
-                    "Board Manager"
-                }
                 div { class: "steps", i { class: "on" } i { class: if connected { "on" } else { "" } } }
                 if connected { Picker {} } else { Connect {} }
             }

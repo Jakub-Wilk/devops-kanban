@@ -8,6 +8,7 @@ use dioxus::desktop::{Config, LogicalSize, WindowBuilder};
 use dioxus::prelude::*;
 use kanban_core::Settings;
 
+mod app_icon;
 mod components;
 mod routes;
 mod services;
@@ -33,8 +34,11 @@ fn main() {
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(&settings.log_level));
     tracing_subscriber::fmt().with_env_filter(filter).init();
 
+    // The icon goes on the window builder: `Config::with_icon` would be overwritten by
+    // `with_window`.
     let window = WindowBuilder::new()
-        .with_title("Board Manager")
+        .with_title("Board Buddy")
+        .with_window_icon(app_icon::icon())
         .with_inner_size(LogicalSize::new(1440.0, 980.0))
         .with_min_inner_size(LogicalSize::new(960.0, 640.0));
     dioxus::LaunchBuilder::desktop()

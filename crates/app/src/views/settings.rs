@@ -29,7 +29,6 @@ pub fn Settings() -> Element {
         div { class: "app",
             header { class: "topbar",
                 div { class: "wrap",
-                    div { class: "brand", span { class: "ico", dangerous_inner_html: icons::LOGO } "Board Manager" }
                     div { class: "spacer" }
                     Link { class: "ghost", to: back, Icon { svg: icons::BACK } "Back to board" }
                 }

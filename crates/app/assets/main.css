@@ -1,4 +1,4 @@
-/* devops-kanban — ported from the "DevOps Board Manager" design (dark, IBM Plex). */
+/* Board Buddy (devops-kanban) — ported from the "DevOps Board Manager" design (dark, IBM Plex). */
 
 :root {
   color-scheme: dark;
@@ -60,10 +60,6 @@ input::placeholder { color: var(--placeholder); }
 
 .topbar { background: var(--surface); border-bottom: 1px solid var(--line); flex: none; }
 .topbar .wrap { padding-top: 10px; padding-bottom: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; }
-.brand { display: flex; align-items: center; gap: 12px; font-weight: 600; font-size: 16px; letter-spacing: -0.01em; }
-.brand svg rect { transform-origin: top; animation: grow .6s var(--spring) both; }
-.brand svg rect:nth-child(2) { animation-delay: .08s; }
-.brand svg rect:nth-child(3) { animation-delay: .16s; }
 .spacer { flex: 1 1 0; }
 
 .ghost { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 14px; border-radius: 8px; border: 1px solid var(--line-strong); background: var(--panel); font-weight: 500; text-decoration: none; transition: background .15s, border-color .15s, transform .15s var(--ease); }
@@ -88,15 +84,12 @@ input::placeholder { color: var(--placeholder); }
 .av.lg { width: 36px; height: 36px; font-size: 12px; }
 
 .pagehead { background: var(--surface); border-bottom: 1px solid var(--line); flex: none; }
-.pagehead .wrap { padding-top: 22px; display: flex; flex-direction: column; gap: 6px; }
-.pagehead h1 { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -0.02em; }
-.pagehead p { margin: 0; color: var(--faint); }
-.pagehead .titlerow { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.pagehead .wrap { padding-top: 4px; display: flex; flex-direction: column; }
 .syncinfo { display: inline-flex; align-items: center; gap: 8px; color: var(--faint); font-size: 12px; }
 .syncdot { width: 7px; height: 7px; border-radius: 50%; background: #4FD1B8; box-shadow: 0 0 0 0 rgba(79, 209, 184, .6); animation: pulse 2.4s infinite; }
 .syncdot.busy { background: var(--accent); animation: pulse .9s infinite; }
 
-.tabs { display: flex; flex-wrap: wrap; margin-top: 12px; gap: 28px; }
+.tabs { display: flex; flex-wrap: wrap; gap: 28px; }
 .tab { position: relative; display: inline-flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 4px; background: none; border: 0; font-weight: 500; color: var(--faint); transition: color .2s; }
 .tab:hover { color: var(--text); }
 .tab.on { color: var(--text); font-weight: 600; }
@@ -326,7 +319,6 @@ main.panel { padding-top: 24px; padding-bottom: 48px; display: flex; flex-direct
 /* ---------- setup & settings ---------- */
 .center { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 32px 16px; overflow-y: auto; }
 .setup { width: 100%; max-width: 480px; display: flex; flex-direction: column; gap: 22px; animation: fadeUp .4s var(--ease) both; }
-.setup .brand { font-size: 20px; }
 .setup .card-lg { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 24px; display: flex; flex-direction: column; gap: 18px; }
 .setup h2 { margin: 0; font-size: 18px; }
 .setup p { margin: 0; color: var(--faint); line-height: 1.5; }
@@ -351,7 +343,6 @@ main.panel { padding-top: 24px; padding-bottom: 48px; display: flex; flex-direct
 @keyframes popIn { from { opacity: 0; transform: translateY(8px) scale(.96); } }
 @keyframes toastIn { from { opacity: 0; transform: translateX(24px) scale(.96); } }
 @keyframes growX { from { transform: scaleX(0); } }
-@keyframes grow { from { transform: scaleY(0); } }
 @keyframes slotOpen { to { height: 64px; } }
 @keyframes shimmer { from { background-position: 120% 0; } to { background-position: -120% 0; } }
 @keyframes spin { to { transform: rotate(360deg); } }

@@ -102,6 +102,3 @@ icon!(
     "<path d=\"M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z\"/><path d=\"M12 9v4M12 17h.01\"/>"
 );
 icon!(BACK, "16", "2", "<path d=\"M15 18l-6-6 6-6\"/>");
-
-/// The three-bar logo, in the accent colour.
-pub const LOGO: &str = "<svg width=\"28\" height=\"28\" viewBox=\"0 0 28 28\" aria-hidden=\"true\"><rect x=\"2\" y=\"3\" width=\"6\" height=\"22\" rx=\"2\" fill=\"#7C9BFF\"/><rect x=\"11\" y=\"3\" width=\"6\" height=\"14\" rx=\"2\" fill=\"#7C9BFF\" opacity=\"0.7\"/><rect x=\"20\" y=\"3\" width=\"6\" height=\"9\" rx=\"2\" fill=\"#7C9BFF\" opacity=\"0.45\"/></svg>";

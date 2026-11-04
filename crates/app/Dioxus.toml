@@ -6,3 +6,5 @@ asset_dir = "assets"
 [bundle]
 identifier = "tv.media-press.devops-kanban"
 publisher = "MediaPress"
+# Rendered by `cargo test -p app write_icon_files -- --ignored` (see src/app_icon.rs).
+icon = ["icons/32x32.png", "icons/128x128.png", "icons/256x256.png", "icons/icon.ico"]
