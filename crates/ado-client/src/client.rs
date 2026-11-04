@@ -202,6 +202,7 @@ impl AdoClient {
 
             if status.is_success() && status != StatusCode::NON_AUTHORITATIVE_INFORMATION {
                 if !is_json && !bytes.is_empty() {
+                    tracing::warn!(%status, path = url.path(), "non-JSON success, treating as sign-in page");
                     return Err(AdoError::Unauthorized);
                 }
                 let body: &[u8] = if bytes.is_empty() { b"null" } else { &bytes };
@@ -213,6 +214,7 @@ impl AdoClient {
                 tokio::time::sleep(delay).await;
                 continue;
             }
+            tracing::debug!(%status, path = url.path(), "ado error response");
             return Err(map_error(
                 status,
                 is_json,

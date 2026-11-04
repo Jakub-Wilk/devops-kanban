@@ -49,7 +49,8 @@ Linux/WSL needs `libwebkit2gtk-4.1-dev libgtk-3-dev libxdo-dev libsoup-3.0-dev`.
 
 These are easy to get wrong:
 
-1. **api-version is `7.1` everywhere** except comments (`7.1-preview.4`). Some teams' boards and
+1. **api-version is `7.1` everywhere** except comments (`7.1-preview.4`) and
+   `connectionData` (`7.1-preview`, which has no GA version). Some teams' boards and
    backlog configuration return HTTP 500 on any version (e.g. Hubert / `DEV - Hubert`). Retry
    5xx with backoff for transient outages, then report the board as unavailable rather than failing the
    whole app.

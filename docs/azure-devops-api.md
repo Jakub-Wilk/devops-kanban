@@ -20,6 +20,7 @@ of 401, so treat any non-JSON 203 as `Unauthorized`. Required PAT scope: `vso.wo
 
 | Area | Method & path | api-version | Purpose |
 |------|---------------|-------------|---------|
+| Connection | `GET _apis/connectionData` | 7.1-preview | Signed-in user, PAT check |
 | Projects | `GET _apis/projects` | 7.1 | Project picker |
 | Teams | `GET _apis/projects/{p}/teams` | 7.1 | Team picker |
 | Team settings | `GET {p}/{t}/_apis/work/teamsettings` | 7.1 | `bugsBehavior`, `backlogVisibilities`, default iteration |
