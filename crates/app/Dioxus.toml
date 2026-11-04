@@ -1,0 +1,8 @@
+[application]
+name = "devops-kanban"
+default_platform = "desktop"
+asset_dir = "assets"
+
+[bundle]
+identifier = "tv.media-press.devops-kanban"
+publisher = "MediaPress"

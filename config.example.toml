@@ -1,0 +1,16 @@
+# Copy to the platform config dir (Linux: ~/.config/devops-kanban/config.toml).
+# See docs/settings.md for every key. The PAT is NOT stored here — it lives in the OS keyring.
+
+organization = "media-press"
+default_project = "IT Finance"
+default_team = "IT Finance Team"
+default_board = "Stories"
+
+poll_interval_secs = 30
+cache_enabled = true
+log_level = "info"
+
+[api]
+base_url = "https://dev.azure.com"
+api_version = "7.1"
+max_batch = 200

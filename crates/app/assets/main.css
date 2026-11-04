@@ -1,0 +1,9 @@
+/* Placeholder. Visual design is out of scope for the scaffold — see docs/architecture.md. */
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+}

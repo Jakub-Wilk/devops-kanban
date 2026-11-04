@@ -1,0 +1,10 @@
+//! Endpoint wrappers, one module per API area. Each adds `impl AdoClient { ... }` methods.
+
+pub mod backlog;
+pub mod boards;
+pub mod comments;
+pub mod iterations;
+pub mod order;
+pub mod teams;
+pub mod wiql;
+pub mod workitems;
