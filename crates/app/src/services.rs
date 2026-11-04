@@ -232,6 +232,22 @@ async fn refetch(st: AppState, client: &AdoClient, project: &str, id: CardId) {
     }
 }
 
+/// Refetches one card from ADO after `delay` (e.g. for 7pace's `CompletedWork` sync).
+pub fn reload_card_later(st: AppState, id: CardId, delay: Duration) {
+    spawn(async move {
+        tokio::time::sleep(delay).await;
+        let Some(client) = st.client.peek().clone() else {
+            return;
+        };
+        let Some(project) = st.workspace.peek().as_ref().map(|w| w.project.clone()) else {
+            return;
+        };
+        if !st.pending.peek().contains(&id) {
+            refetch(st, &client, &project, id).await;
+        }
+    });
+}
+
 /// Drops `id` on `column_id` (and `lane_id`) at `index` of the `board` kanban.
 pub fn move_card(
     mut st: AppState,

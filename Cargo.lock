@@ -64,6 +64,7 @@ dependencies = [
  "dioxus",
  "kanban-core",
  "serde_json",
+ "sevenpace-client",
  "time",
  "tokio",
  "tracing",
@@ -4364,6 +4365,7 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.21",
  "time",
+ "tokio",
  "tracing",
  "url",
 ]

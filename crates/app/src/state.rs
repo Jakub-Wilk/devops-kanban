@@ -2,16 +2,19 @@
 //!
 //! Holds: settings, the ADO client, connection/load status, the loaded [`Workspace`] (board
 //! configs + cards), ids with a write in flight (for optimistic updates and to keep sync off
-//! them), the transient drag state, the open dialog and toasts. Every field is a `Signal`, so
+//! them), the transient drag state, the open dialogs and toasts, and 7pace time tracking (client,
+//! the user's entries per card, the running timer). Every field is a `Signal`, so
 //! `AppState` is `Copy` and can move into event handlers and tasks.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use ado_client::AdoClient;
 use dioxus::core::Task;
 use dioxus::prelude::*;
 use kanban_core::sync::InFlight;
+use kanban_core::time::{Activity, TimeEntry, TimerState};
 use kanban_core::{CardId, Settings, Workspace};
+use sevenpace_client::SevenPaceClient;
 use time::OffsetDateTime;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -82,6 +85,46 @@ pub struct ItemForm {
     pub state: String,
 }
 
+/// 7pace time tracking (see `time_tracking.rs`).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct TimeTracking {
+    /// The 7pace user's name, once the token is validated: "connected".
+    pub me: Option<String>,
+    /// Why time tracking isn't available (bad token, API disabled), for Settings.
+    pub error: Option<String>,
+    pub activities_enabled: bool,
+    pub activities: Vec<Activity>,
+    pub default_activity: Option<String>,
+    /// The user's own entries per card, newest first.
+    pub entries: HashMap<CardId, Vec<TimeEntry>>,
+    /// Cards whose entries were fetched (so empty lists aren't fetched again).
+    pub loaded: HashSet<CardId>,
+    /// Bumped by Reload so the kanban fetches entries again.
+    pub generation: u64,
+    pub timer: Option<TimerState>,
+    /// A start/stop is in flight.
+    pub busy: bool,
+}
+
+/// The add/edit time dialog. Form fields are the raw input values.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TimeDialogState {
+    pub card: CardId,
+    pub card_title: String,
+    /// Worklog uuid when editing.
+    pub editing: Option<String>,
+    pub can_delete: bool,
+    /// `YYYY-MM-DD`.
+    pub date: String,
+    /// `HH:MM`; empty = ends now.
+    pub start: String,
+    /// Free text, see `kanban_core::time::parse_duration`.
+    pub duration: String,
+    /// Activity type id; empty = the user's default.
+    pub activity: String,
+    pub comment: String,
+}
+
 #[derive(Clone, Copy)]
 pub struct AppState {
     pub settings: Signal<Settings>,
@@ -102,6 +145,11 @@ pub struct AppState {
     pub sync_task: Signal<Option<Task>>,
     /// Shown on the setup screen after the PAT was rejected.
     pub auth_error: Signal<Option<String>>,
+    pub sevenpace: Signal<Option<SevenPaceClient>>,
+    pub time: Signal<TimeTracking>,
+    pub time_dialog: Signal<Option<TimeDialogState>>,
+    /// Wall clock for running timers, ticked every second while one runs.
+    pub clock: Signal<OffsetDateTime>,
 }
 
 impl AppState {
@@ -121,6 +169,10 @@ impl AppState {
             last_sync: Signal::new(None),
             sync_task: Signal::new(None),
             auth_error: Signal::new(None),
+            sevenpace: Signal::new(None),
+            time: Signal::new(TimeTracking::default()),
+            time_dialog: Signal::new(None),
+            clock: Signal::new(OffsetDateTime::now_utc()),
         }
     }
 }

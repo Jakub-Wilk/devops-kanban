@@ -52,6 +52,19 @@ icon!(
 icon!(PLUS, "16", "2.4", "<path d=\"M12 5v14M5 12h14\"/>");
 icon!(PLUS_14, "14", "2.4", "<path d=\"M12 5v14M5 12h14\"/>");
 icon!(MINUS, "16", "2.4", "<path d=\"M5 12h14\"/>");
+icon!(PLAY, "14", "2.2", "<path d=\"M7 4.5v15l12.5-7.5z\"/>");
+icon!(
+    STOP,
+    "14",
+    "2.2",
+    "<rect x=\"6\" y=\"6\" width=\"12\" height=\"12\" rx=\"2\"/>"
+);
+icon!(
+    CLOCK_PLUS,
+    "14",
+    "2",
+    "<circle cx=\"11\" cy=\"13\" r=\"8\"/><path d=\"M11 9v4l2.5 2.5M19 2v5M16.5 4.5h5\"/>"
+);
 icon!(
     FOLDER,
     "14",

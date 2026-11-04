@@ -18,6 +18,7 @@ desktop = ["dioxus/desktop"]
 [dependencies]
 ado-client.workspace = true
 kanban-core.workspace = true
+sevenpace-client.workspace = true
 dioxus.workspace = true
 tokio.workspace = true
 tracing.workspace = true

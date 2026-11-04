@@ -6,9 +6,6 @@
 //! Same rules as `ado-client`: no UI, no persistence, DTOs mirror the wire JSON.
 //! See `docs/7pace-api.md`.
 
-// Scaffold: fields are wired up once the client is implemented. Remove this allow then.
-#![allow(dead_code)]
-
 pub mod api;
 pub mod auth;
 pub mod client;

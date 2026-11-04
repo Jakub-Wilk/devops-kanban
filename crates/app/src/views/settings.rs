@@ -1,4 +1,4 @@
-//! Settings editor (see docs/settings.md).
+//! Settings editor (see docs/settings.md), including the 7pace time tracking token.
 
 use dioxus::prelude::*;
 
@@ -7,6 +7,7 @@ use crate::components::widgets::Icon;
 use crate::routes::Route;
 use crate::services;
 use crate::state::use_app;
+use crate::time_tracking;
 
 #[component]
 pub fn Settings() -> Element {
@@ -108,6 +109,99 @@ pub fn Settings() -> Element {
                                 },
                             }
                         }
+                    }
+                    TimeTrackingSettings {}
+                }
+            }
+        }
+    }
+}
+
+/// Enable 7pace and manage its API token (keyring account `7pace:<organization>`).
+#[component]
+fn TimeTrackingSettings() -> Element {
+    let mut st = use_app();
+    let mut token = use_signal(String::new);
+    let mut saving = use_signal(|| false);
+    let mut message = use_signal(|| None::<Result<String, String>>);
+    let enabled = st.settings.read().time_tracking.enabled;
+    let t = st.time.read();
+    let status = match (&t.me, &t.error) {
+        (Some(me), _) => format!("Connected as {me}."),
+        (None, Some(e)) => e.clone(),
+        (None, None) if enabled => "Connecting…".to_owned(),
+        (None, None) => "Off.".to_owned(),
+    };
+    let connected = t.me.is_some();
+    drop(t);
+    rsx! {
+        h2 { style: "margin: 12px 0 0; font-size: 18px; letter-spacing: -0.01em", "7pace time tracking" }
+        div { class: "list", style: "padding: 4px 20px",
+            div { class: "row",
+                div {
+                    strong { "Track time on the kanban" }
+                    p { "Start/stop timer, add time and your time entries on each card. {status}" }
+                }
+                input {
+                    r#type: "checkbox",
+                    style: "width: 18px; height: 18px; accent-color: var(--accent)",
+                    checked: enabled,
+                    onchange: move |e| {
+                        st.settings.write().time_tracking.enabled = e.checked();
+                        services::save_settings(st);
+                        time_tracking::connect(st);
+                    },
+                }
+            }
+            div { class: "row",
+                div {
+                    strong { "7pace API token" }
+                    p { "Create one in 7pace Timetracker → Settings → Reporting & API. It is not your Azure DevOps PAT. Stored in your OS keyring." }
+                    if let Some(m) = message() {
+                        {
+                            let (ok, text) = match m { Ok(s) => (true, s), Err(s) => (false, s) };
+                            rsx! { p { style: if ok { "color: #A6E6BE" } else { "color: var(--danger)" }, "{text}" } }
+                        }
+                    }
+                }
+                form {
+                    style: "display: flex; gap: 8px; flex: none",
+                    onsubmit: move |e| {
+                        e.prevent_default();
+                        let value = token();
+                        saving.set(true);
+                        message.set(None);
+                        spawn(async move {
+                            let result = time_tracking::save_token(st, value).await;
+                            saving.set(false);
+                            if result.is_ok() {
+                                token.set(String::new());
+                            }
+                            message.set(Some(result.map(|me| format!("Saved. Connected as {me}."))));
+                        });
+                    },
+                    input {
+                        class: "field",
+                        r#type: "password",
+                        style: "width: 220px",
+                        placeholder: if connected { "Paste a new token" } else { "Paste the token" },
+                        autocomplete: "off",
+                        value: "{token}",
+                        oninput: move |e| token.set(e.value()),
+                    }
+                    button { class: "primary", r#type: "submit", disabled: saving() || token().trim().is_empty(),
+                        if saving() { span { class: "spinner" } }
+                        "Save"
+                    }
+                    button {
+                        class: "ghost",
+                        r#type: "button",
+                        disabled: saving(),
+                        onclick: move |_| {
+                            time_tracking::remove_token(st);
+                            message.set(Some(Ok("Token removed.".into())));
+                        },
+                        "Remove"
                     }
                 }
             }

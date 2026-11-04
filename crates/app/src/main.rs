@@ -13,10 +13,12 @@ mod components;
 mod routes;
 mod services;
 mod state;
+mod time_tracking;
 mod views;
 
 use components::avatars::AvatarServer;
 use components::item_dialog::ItemDialog;
+use components::time::TimeKeeper;
 use components::toast::Toasts;
 use components::tooltip::TooltipLayer;
 use routes::Route;
@@ -81,5 +83,6 @@ fn App() -> Element {
         Toasts {}
         TooltipLayer {}
         AvatarServer {}
+        TimeKeeper {}
     }
 }

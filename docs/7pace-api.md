@@ -11,7 +11,8 @@ Sources (November 2026):
 - Appfire docs: <https://support.appfire.com/space/7TFA/1253539983.md> (REST API),
   [OData](https://support.appfire.com/space/7TFA/1253540266.md)
 
-Nothing here has been verified with a live 7pace call yet. See [Unverified](#unverified).
+The shapes here were checked against the published v3.2 OpenAPI spec, but not yet against a live
+7pace call. See [Unverified](#unverified).
 
 ## Host and versions
 
@@ -24,8 +25,10 @@ Nothing here has been verified with a live 7pace call yet. See [Unverified](#unv
 - This is **not** `dev.azure.com`, so the ADO client, its rate limits and its token don't apply.
 - The current stable version is **3.2**. 3.3-beta (adds soft delete) may change without notice. 2.1 is retired, and
   3.0 and 3.1 are deprecated.
-- Every response is an envelope: `{ "data": … }` on success, `{ "error": { "code", "message" } }` on
-  failure.
+- REST responses are an envelope: `{ "data": … }` on success. The **tracking** endpoints
+  (`/api/tracking/client/...`) return their `trackingStateModel` **without** the envelope.
+- Errors (v3.2 spec) are `{ "status", "errorCode", "errorDescription", "fields": [{name, value}] }`
+  at the top level. The client also accepts the older `{ "error": { "code", "message" } }`.
 
 ## Authentication
 
@@ -95,7 +98,8 @@ Content-Type: application/json
 | `activityTypeId` | uuid? | Defaults to the user's default activity |
 | `userId` | uuid? | Log for someone else. Defaults to the token's user and needs elevated rights |
 
-The response is the created worklog (`data.id` is its uuid). There is no rev or ETag concurrency
+The response is the created worklog (`data.id` is its uuid). Careful with the spelling: the
+**write** model has `timeStamp`, but the **read** model (`GET workLogs`) has `timestamp`. There is no rev or ETag concurrency
 like in ADO; a conflicting write returns **409**.
 
 ## Live timer
@@ -105,7 +109,20 @@ POST /api/tracking/client/startTracking?api-version=3.2
 { "tfsId": 117349, "timeZone": 60, "remark": "…", "activityTypeId": "<uuid>", "isBillable": true }
 ```
 
-`timeZone` is the UTC offset **in minutes**. Stopping creates the worklog. Only one timer runs per
+`timeZone` is the UTC offset **in minutes**. Stopping creates the worklog. Starting while a timer
+runs switches it (7pace stops and saves the old one).
+
+`GET /api/tracking/client/current/false` returns (unwrapped):
+
+```json
+{ "track": { "tfsId": 117349, "trackingState": "tracking", "currentTrackLength": 125,
+             "currentTrackStartedDateTime": "…", "workItem": { "id": 117349, "title": "…" } },
+  "trackSettings": { "isTrackingStartAllowed": true, "responseState": "OK", "responseMessage": null } }
+```
+
+`track` is null when nothing runs; `trackingState: "idle"` also counts as not running.
+`trackSettings.responseState` `Error`/`AuthError` with a `responseMessage` can refuse a start
+without an HTTP error. Only one timer runs per
 user, and the 7pace web UI or desktop client may start or stop it too, so read `current` before showing
 the timer's state.
 
@@ -139,9 +156,22 @@ Never poll 7pace for card totals. Use `CompletedWork`.
 2 Reopened, 3 Approved, 99 Closed). Edits to time in approved weeks are expected to be rejected.
 Show 7pace's error message verbatim.
 
+## How the app uses it
+
+Kanban only (`crates/app/src/time_tracking.rs`, `components/time.rs`):
+- **Startup / Settings:** `GET rest/me` validates the token, then `GET rest/activityTypes` and the
+  timer's `current`.
+- **Entries:** the user's own `GET rest/workLogs?$workItemIds=…&$includeEditable=true` for the cards
+  the kanban shows (≤100 ids per call, `$count=500` pages), once per card; again after a write or
+  Reload. `isCanEdit == false` (approved weeks) makes an entry read-only.
+- **Timer:** `current` on Kanban open, window focus, after start/stop, and every 5 minutes.
+- **Writes:** `POST`/`PATCH`/`DELETE rest/workLogs`, `startTracking`, `stopTracking/0`. After each,
+  the card's entries are refetched and the ADO card is refetched ~6 s later for `CompletedWork`.
+
 ## Unverified
 
-Test these with a real token before building on them:
+The shapes above come from the published v3.2 OpenAPI spec; the client's tests use hand-written
+JSON in those shapes. Test these with a real token:
 
 - How REST interprets `timeStamp` with or without a UTC offset (the spec says "local time"; the
   OData samples use `Z`).
@@ -149,3 +179,5 @@ Test these with a real token before building on them:
 - The minimum duration and any rounding on writes.
 - The exact role needed to log time for another user via `userId`.
 - CORS (irrelevant for the desktop app).
+- That `currentTrackStartedDateTime` is local time (the app treats a value without an offset as
+  local, and falls back to `now − currentTrackLength`).

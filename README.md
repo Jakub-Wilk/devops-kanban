@@ -8,7 +8,8 @@ straight back to Azure DevOps or 7pace. There is no server and no separate datab
 
 > **Status:** first implementation. Epic list, kanban (the team's real Features and Stories
 > boards, with hideable columns) and timeline views, with drag and drop written back to Azure
-> DevOps. 7pace time tracking has a client crate but no UI yet.
+> DevOps. 7pace time tracking on kanban cards: start/stop the timer, add time, and edit your
+> entries.
 
 ## Prerequisites
 
@@ -49,10 +50,13 @@ Microsoft Entra sign-in may be added later. The auth layer is designed for it.
 Time tracking needs a separate **7pace API token**, because 7pace doesn't accept the Azure DevOps PAT:
 
 1. In Azure DevOps, open *7pace Timetracker → Settings → Reporting & API → Create New Token*.
-2. Paste it in the app's settings. It goes to the OS keyring like the PAT.
+2. Paste it in the app's *Settings → 7pace time tracking*. It is checked against 7pace and goes to
+   the OS keyring like the PAT. Saving it turns time tracking on.
 3. The token is valid for 1 year. Renew it in the same 7pace screen.
 
-Hours already tracked appear on cards without a token, because 7pace syncs them into *Completed Work*.
+Each kanban card then gets a timer (▶/■), *Add time*, and your own entries (click one to edit or
+delete it). A running timer also shows in the top bar on every tab. Hours already tracked appear on
+cards without a token, because 7pace syncs them into *Completed Work*.
 
 ## Settings
 

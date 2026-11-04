@@ -5,8 +5,9 @@ that provides a more ergonomic kanban board on top of Azure DevOps Boards.
 
 Status: **first implementation**. The UI follows the "DevOps Board Manager" design (epic list,
 kanban, timeline, item dialog; dark theme, IBM Plex). Keep new UI consistent with
-`crates/app/assets/main.css` and don't redesign without being asked. 7pace has a client crate but
-no UI yet.
+`crates/app/assets/main.css` and don't redesign without being asked. 7pace time tracking is on the
+kanban only (timer, add/edit time, the user's entries per card) plus a running-timer chip in the
+top bar; the app side is `crates/app/src/time_tracking.rs` and `components/time.rs`.
 
 ## Crate map
 

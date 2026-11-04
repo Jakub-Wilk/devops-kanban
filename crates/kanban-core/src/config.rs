@@ -249,6 +249,35 @@ pub fn delete_pat(organization: &str) -> Result<(), CoreError> {
     }
 }
 
+/// Keyring account of the 7pace API token.
+fn sevenpace_account(organization: &str) -> String {
+    format!("7pace:{organization}")
+}
+
+/// The 7pace API token: `DEVOPS_KANBAN_7PACE_TOKEN`, else the keyring. `Ok(None)` when not stored.
+pub fn load_7pace_token(organization: &str) -> Result<Option<String>, CoreError> {
+    if let Ok(token) = std::env::var("DEVOPS_KANBAN_7PACE_TOKEN")
+        && !token.is_empty()
+    {
+        return Ok(Some(token));
+    }
+    keyring_get(&sevenpace_account(organization))
+}
+
+/// Stores the 7pace token in the keyring. Fails (and stores nothing) without a keyring backend.
+pub fn store_7pace_token(organization: &str, token: &str) -> Result<(), CoreError> {
+    keyring_entry(&sevenpace_account(organization))?
+        .set_password(token)
+        .map_err(|e| CoreError::Keyring(e.to_string()))
+}
+
+pub fn delete_7pace_token(organization: &str) -> Result<(), CoreError> {
+    match keyring_entry(&sevenpace_account(organization))?.delete_credential() {
+        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+        Err(e) => Err(CoreError::Keyring(e.to_string())),
+    }
+}
+
 fn keyring_entry(account: &str) -> Result<keyring::Entry, CoreError> {
     keyring::Entry::new(KEYRING_SERVICE, account).map_err(|e| CoreError::Keyring(e.to_string()))
 }

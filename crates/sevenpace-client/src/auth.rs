@@ -24,7 +24,7 @@ impl SevenPaceToken {
 
 impl AuthProvider for SevenPaceToken {
     fn authorization_header(&self) -> String {
-        todo!("Bearer <token>")
+        format!("Bearer {}", self.token)
     }
 }
 

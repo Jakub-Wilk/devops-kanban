@@ -33,7 +33,7 @@ The Setup view creates this file on first run. Start from
 | `api.base_url`           | string  | `https://dev.azure.com` | ADO host |
 | `api.api_version`        | string  | `7.1`                   | api-version for all stable endpoints |
 | `api.max_batch`          | int     | `200`                   | Ids per `workitemsbatch` call. The ADO maximum is 200 |
-| `time_tracking.enabled`  | bool    | `false`                 | Enable 7pace features (log time, timer). Card totals from `CompletedWork` work without it |
+| `time_tracking.enabled`  | bool    | `false`                 | 7pace on the kanban (timer, add time, your entries). Toggled in *Settings*; saving a token turns it on. Card totals from `CompletedWork` work without it |
 | `time_tracking.base_url` | string  | `https://{organization}.timehub.7pace.com` | 7pace host |
 | `time_tracking.api_version` | string | `3.2`               | 7pace REST api-version (required on every call) |
 

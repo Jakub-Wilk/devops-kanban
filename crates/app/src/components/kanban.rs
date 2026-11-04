@@ -1,7 +1,7 @@
 //! "Kanban" tab: the team's real board for one backlog level (columns, WIP limits, swimlanes
 //! and state mappings from ADO), with a Features/Stories switcher, a Columns menu to hide
 //! columns, epic, assignee and area filters (all saved per board), each card's tasks as a
-//! checklist, and drag-and-drop between and within
+//! checklist, 7pace time tracking per card, and drag-and-drop between and within
 //! columns.
 
 use std::collections::HashSet;
@@ -17,6 +17,7 @@ use crate::components::filters::{
 use crate::components::icons;
 use crate::components::item_dialog::{open_edit, open_new};
 use crate::components::tasks::{CardTasks, TaskItem, task_items};
+use crate::components::time::{CardTime, EntryLoader};
 use crate::components::widgets::{Assignee, DateLabel, Icon, Prio, StatePill};
 use crate::routes::Route;
 use crate::services;
@@ -92,6 +93,8 @@ pub fn Kanban(board: String) -> Element {
         .filter(|c| filters::matches_board(c, &prefs, me.as_ref()))
         .map(|c| c.id)
         .collect();
+    let mut shown_ids: Vec<CardId> = visible.iter().copied().collect();
+    shown_ids.sort_unstable();
     let in_areas: Vec<&Card> = base
         .iter()
         .copied()
@@ -251,6 +254,7 @@ pub fn Kanban(board: String) -> Element {
             }
         }
 
+        EntryLoader { ids: shown_ids }
         if columns.is_empty() {
             div { class: "note", Icon { svg: icons::INFO } "All columns are hidden. Use the Columns menu to show some." }
         } else {
@@ -562,10 +566,17 @@ fn CardView(
     let id = card.id;
     let dragging = *st.drag.read() == Some(Drag::Card(id));
     let pending = st.pending.read().contains(&id);
+    let tracking = st
+        .time
+        .read()
+        .timer
+        .as_ref()
+        .is_some_and(|t| t.work_item == id);
     let class = format!(
-        "card{}{}",
+        "card{}{}{}",
         if dragging { " dragging" } else { "" },
-        if pending { " pending" } else { "" }
+        if pending { " pending" } else { "" },
+        if tracking { " tracking" } else { "" }
     );
     let (category, color) = state;
     let edit = card.clone();
@@ -621,6 +632,7 @@ fn CardView(
                 Assignee { id, person: card.assigned_to.clone(), title: card.title.clone() }
                 DateLabel { date: card.target_date, open: !category.is_done() }
             }
+            CardTime { card: parent.clone() }
             if !task_list.is_empty() || add_task.is_some() {
                 CardTasks { parent: parent.clone(), tasks: task_list.clone(), task_type: add_task.clone() }
             }

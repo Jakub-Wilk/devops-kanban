@@ -10,6 +10,7 @@ use crate::components::epic_list::EpicList;
 use crate::components::filters::update_view_prefs;
 use crate::components::icons;
 use crate::components::kanban::Kanban;
+use crate::components::time::TimerChip;
 use crate::components::timeline::Timeline;
 use crate::components::widgets::{Avatar, Icon};
 use crate::routes::Route;
@@ -132,6 +133,7 @@ pub fn Board(project: String, team: String, board: String) -> Element {
                         Icon { svg: icons::CHEVRON_DOWN }
                     }
                     div { class: "spacer" }
+                    TimerChip {}
                     span { class: "syncinfo",
                         span { class: if matches!(status, Status::Loading | Status::Refreshing) { "syncdot busy" } else { "syncdot" } }
                         match (&status, &last_sync) {
@@ -147,7 +149,10 @@ pub fn Board(project: String, team: String, board: String) -> Element {
                         "data-tip": "Reload",
                         onclick: {
                             let (p, t) = (project.clone(), team.clone());
-                            move |_| services::open_workspace(st, p.clone(), t.clone(), true)
+                            move |_| {
+                                services::open_workspace(st, p.clone(), t.clone(), true);
+                                crate::time_tracking::reload(st);
+                            }
                         },
                         Icon { svg: icons::REFRESH }
                     }
