@@ -5,5 +5,6 @@ pub mod epic_list;
 pub mod icons;
 pub mod item_dialog;
 pub mod kanban;
+pub mod timeline;
 pub mod toast;
 pub mod widgets;
