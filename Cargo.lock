@@ -63,9 +63,12 @@ dependencies = [
  "ado-client",
  "dioxus",
  "kanban-core",
+ "serde_json",
+ "time",
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "url",
 ]
 
 [[package]]
