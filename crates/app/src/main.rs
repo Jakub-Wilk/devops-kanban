@@ -1,5 +1,9 @@
 //! devops-kanban desktop entry point: settings, logging, window config, root component.
 
+// Release builds on Windows use the GUI subsystem so no console window opens alongside the app.
+// Debug builds keep the console for `tracing` output.
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
+
 use dioxus::desktop::{Config, LogicalSize, WindowBuilder};
 use dioxus::prelude::*;
 use kanban_core::Settings;
