@@ -6,6 +6,9 @@
 
 use std::fmt;
 
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD;
+
 /// Produces the value of the `Authorization` header for each request.
 pub trait AuthProvider: Send + Sync {
     fn authorization_header(&self) -> String;
@@ -25,7 +28,7 @@ impl PatAuth {
 
 impl AuthProvider for PatAuth {
     fn authorization_header(&self) -> String {
-        todo!("Basic base64(\":\" + pat)")
+        format!("Basic {}", STANDARD.encode(format!(":{}", self.pat)))
     }
 }
 
@@ -34,5 +37,20 @@ impl fmt::Debug for PatAuth {
         f.debug_struct("PatAuth")
             .field("pat", &"<redacted>")
             .finish()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn basic_header_has_empty_username() {
+        assert_eq!(PatAuth::new("abc").authorization_header(), "Basic OmFiYw==");
+    }
+
+    #[test]
+    fn debug_redacts_pat() {
+        assert!(!format!("{:?}", PatAuth::new("secret")).contains("secret"));
     }
 }

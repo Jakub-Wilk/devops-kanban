@@ -4,9 +4,6 @@
 //! kanban needs. No UI, no persistence, no platform-specific code — this crate must stay usable
 //! from a future web/fullstack target. See `docs/azure-devops-api.md` for the endpoint catalogue.
 
-// Scaffold: fields are wired up once the client is implemented. Remove this allow then.
-#![allow(dead_code)]
-
 pub mod api;
 pub mod auth;
 pub mod client;
@@ -17,3 +14,4 @@ pub mod rate_limit;
 pub use auth::{AuthProvider, PatAuth};
 pub use client::{AdoClient, ClientConfig};
 pub use error::AdoError;
+pub use models::*;
