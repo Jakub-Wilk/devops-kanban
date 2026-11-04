@@ -1,14 +1,18 @@
 //! "Kanban" tab: the team's real board for one backlog level (columns, WIP limits, swimlanes
 //! and state mappings from ADO), with a Features/Stories switcher, a Columns menu to hide
-//! columns (saved per board), filters, and drag-and-drop between and within columns.
+//! columns, epic, assignee and area filters (all saved per board), and drag-and-drop between and within
+//! columns.
 
 use std::collections::HashSet;
 
 use dioxus::prelude::*;
-use kanban_core::card::Person;
+use kanban_core::filters;
 use kanban_core::{Board, Card, CardId, Workspace};
 
-use crate::components::epic_list::{default_area, in_iteration};
+use crate::components::epic_list::default_area;
+use crate::components::filters::{
+    FilterMenu, FilterOption, area_options, assignee_options, view_prefs,
+};
 use crate::components::icons;
 use crate::components::item_dialog::{open_edit, open_new};
 use crate::components::widgets::{Assignee, DateLabel, Icon, Prio, StatePill};
@@ -16,20 +20,9 @@ use crate::routes::Route;
 use crate::services;
 use crate::state::{AppState, Drag, DropSlot, use_app};
 
-#[derive(Clone, PartialEq)]
-enum PersonFilter {
-    Everyone,
-    Me,
-    Unassigned,
-    Person(String),
-}
-
 #[component]
-pub fn Kanban(board: String, iteration: Option<String>) -> Element {
+pub fn Kanban(board: String) -> Element {
     let st = use_app();
-    let mut epic_filter = use_signal(|| None::<CardId>);
-    let mut person = use_signal(|| PersonFilter::Everyone);
-    let mut menu_open = use_signal(|| false);
     let collapsed_lanes = use_signal(HashSet::<String>::new);
 
     let ws_guard = st.workspace.read();
@@ -87,60 +80,29 @@ pub fn Kanban(board: String, iteration: Option<String>) -> Element {
         .or_else(|| b.work_item_types.first().cloned())
         .unwrap_or_default();
 
-    // Filters: epic → iteration → person (person counts are taken before the person filter).
-    let on_board: Vec<&Card> = ws.cards.values().filter(|c| b.shows(c)).collect();
-    let epic_sel = *epic_filter.read();
-    let base: Vec<&Card> = on_board
-        .iter()
-        .copied()
-        .filter(|c| epic_sel.is_none_or(|e| hierarchy.root_of.get(&c.id) == Some(&e)))
-        .filter(|c| in_iteration(c, &iteration))
-        .collect();
-    let pf = person.read().clone();
-    let matches_person = |c: &Card, f: &PersonFilter| match f {
-        PersonFilter::Everyone => true,
-        PersonFilter::Me => me.as_ref().is_some_and(|m| {
-            c.assigned_to
-                .as_ref()
-                .is_some_and(|a| a.unique_name == m.unique_name)
-        }),
-        PersonFilter::Unassigned => c.assigned_to.is_none(),
-        PersonFilter::Person(u) => c.assigned_to.as_ref().is_some_and(|a| a.unique_name == *u),
-    };
+    // Filters: epic → iteration → assignees and areas (each menu counts before its own filter).
+    let view = view_prefs(st, ws);
+    // A saved epic that was closed or moved away no longer filters.
+    let epic_sel = prefs.epic.filter(|e| hierarchy.roots.contains(e));
+    let base = filters::kanban_cards(ws, &hierarchy, b, epic_sel, view.iteration.as_deref());
     let visible: HashSet<CardId> = base
         .iter()
-        .filter(|c| matches_person(c, &pf))
+        .filter(|c| filters::matches_board(c, &prefs, me.as_ref()))
         .map(|c| c.id)
         .collect();
-    let people: Vec<Person> = kanban_core::card::people(base.iter().copied())
-        .into_iter()
-        .filter(|p| me.as_ref().is_none_or(|m| m.unique_name != p.unique_name))
+    let in_areas: Vec<&Card> = base
+        .iter()
+        .copied()
+        .filter(|c| filters::matches_areas(c, &prefs.areas))
         .collect();
-    let mut person_chips: Vec<(PersonFilter, String, String, usize)> = vec![(
-        PersonFilter::Everyone,
-        "Everyone".into(),
-        "Everyone".into(),
-        base.len(),
-    )];
-    if me.is_some() {
-        let n = base
-            .iter()
-            .filter(|c| matches_person(c, &PersonFilter::Me))
-            .count();
-        person_chips.push((PersonFilter::Me, "Me".into(), "Assigned to me".into(), n));
-    }
-    for p in &people {
-        let f = PersonFilter::Person(p.unique_name.clone());
-        let n = base.iter().filter(|c| matches_person(c, &f)).count();
-        person_chips.push((f, p.initials(), p.display_name.clone(), n));
-    }
-    let unassigned = base.iter().filter(|c| c.assigned_to.is_none()).count();
-    person_chips.push((
-        PersonFilter::Unassigned,
-        "Unassigned".into(),
-        "Unassigned".into(),
-        unassigned,
-    ));
+    let assignee_opts = assignee_options(&in_areas, me.as_ref());
+    let of_assignees: Vec<&Card> = base
+        .iter()
+        .copied()
+        .filter(|c| filters::matches_assignees(c, &prefs.assignees, me.as_ref()))
+        .collect();
+    let area_opts = area_options(&of_assignees, &prefs.areas);
+    let on_board: Vec<&Card> = ws.cards.values().filter(|c| b.shows(c)).collect();
 
     let mut epic_options: Vec<(CardId, String)> = hierarchy
         .roots
@@ -156,6 +118,15 @@ pub fn Kanban(board: String, iteration: Option<String>) -> Element {
 
     let columns: Vec<kanban_core::Column> = b.visible_columns(&hidden).cloned().collect();
     let all_columns: Vec<String> = b.columns.iter().map(|c| c.name.clone()).collect();
+    let column_opts: Vec<FilterOption> = all_columns
+        .iter()
+        .map(|c| FilterOption {
+            value: c.clone(),
+            label: c.clone(),
+            count: None,
+        })
+        .collect();
+    let shown_columns: Vec<String> = columns.iter().map(|c| c.name.clone()).collect();
     let lanes: Vec<(Option<String>, Option<String>, Option<String>)> = if b.has_lanes() {
         b.lanes
             .iter()
@@ -181,6 +152,13 @@ pub fn Kanban(board: String, iteration: Option<String>) -> Element {
     drop(ws_guard);
 
     let hidden_n = hidden.len();
+    let filtering = epic_sel.is_some() || !prefs.assignees.is_empty() || !prefs.areas.is_empty();
+    let save = {
+        let (project, team, board) = (project.clone(), team.clone(), board.clone());
+        move |f: Box<dyn FnOnce(&mut kanban_core::BoardPrefs)>| {
+            save_board_prefs(st, &project, &team, &board, f)
+        }
+    };
     rsx! {
         div { class: "toolbar",
             {switcher}
@@ -189,8 +167,14 @@ pub fn Kanban(board: String, iteration: Option<String>) -> Element {
                 span { class: "select-wrap",
                     select {
                         class: "field",
-                        style: "min-width: 260px; max-width: 360px",
-                        onchange: move |e| epic_filter.set(e.value().parse().ok()),
+                        style: "min-width: 220px; max-width: 360px",
+                        onchange: {
+                            let save = save.clone();
+                            move |e: FormEvent| {
+                                let epic = e.value().parse().ok();
+                                save(Box::new(move |p| p.epic = epic))
+                            }
+                        },
                         option { value: "", selected: epic_sel.is_none(), "All epics" }
                         for (id, title) in epic_options {
                             option { key: "{id}", value: "{id}", selected: epic_sel == Some(id), "{id}  {title}" }
@@ -199,27 +183,59 @@ pub fn Kanban(board: String, iteration: Option<String>) -> Element {
                     span { class: "chev", Icon { svg: icons::CHEVRON_DOWN } }
                 }
             }
-            div { class: "spacer" }
-            div { class: "popover-anchor",
+            FilterMenu {
+                label: "Assigned to",
+                options: assignee_opts,
+                selected: prefs.assignees.clone(),
+                on_change: {
+                    let save = save.clone();
+                    move |v: Vec<String>| save(Box::new(move |p| p.assignees = v))
+                },
+            }
+            FilterMenu {
+                label: "Area",
+                options: area_opts,
+                selected: prefs.areas.clone(),
+                on_change: {
+                    let save = save.clone();
+                    move |v: Vec<String>| save(Box::new(move |p| p.areas = v))
+                },
+            }
+            if filtering {
                 button {
-                    class: "ghost",
+                    class: "link",
                     r#type: "button",
-                    aria_expanded: "{menu_open}",
-                    onclick: move |_| menu_open.toggle(),
-                    Icon { svg: icons::COLUMNS }
-                    "Columns"
-                    if hidden_n > 0 { span { class: "hidden-count", title: "{hidden_n} hidden", "{hidden_n}" } }
+                    onclick: {
+                        let save = save.clone();
+                        move |_| save(Box::new(|p| {
+                            p.epic = None;
+                            p.assignees.clear();
+                            p.areas.clear();
+                        }))
+                    },
+                    Icon { svg: icons::CLOSE }
+                    "Clear filters"
                 }
-                if menu_open() {
-                    ColumnsMenu {
-                        project: project.clone(),
-                        team: team.clone(),
-                        board: board.clone(),
-                        columns: all_columns,
-                        hidden: hidden.clone(),
-                        on_close: move |_| menu_open.set(false),
+            }
+            div { class: "spacer" }
+            FilterMenu {
+                label: "Columns",
+                icon: icons::COLUMNS,
+                plain: true,
+                badge: hidden_n,
+                align_right: true,
+                options: column_opts,
+                selected: shown_columns,
+                reset_label: "Show all",
+                reset_to: all_columns.clone(),
+                on_change: {
+                    let (project, team, board) = (project.clone(), team.clone(), board.clone());
+                    let all = all_columns.clone();
+                    move |shown: Vec<String>| {
+                        let hidden: Vec<String> = all.iter().filter(|c| !shown.contains(c)).cloned().collect();
+                        save_board_prefs(st, &project, &team, &board, |p| p.hidden_columns = hidden);
                     }
-                }
+                },
             }
             button {
                 class: "primary",
@@ -232,24 +248,6 @@ pub fn Kanban(board: String, iteration: Option<String>) -> Element {
                 "New {default_type.to_lowercase()}"
             }
         }
-        div { class: "toolbar", role: "group", aria_label: "Filter by assignee",
-            span { class: "label", "Assigned to" }
-            for (f, label, title, count) in person_chips {
-                button {
-                    key: "{title}",
-                    class: if pf == f { "chip on" } else { "chip" },
-                    r#type: "button",
-                    title: "{title}",
-                    aria_pressed: "{pf == f}",
-                    onclick: {
-                        let f = f.clone();
-                        move |_| person.set(f.clone())
-                    },
-                    "{label}"
-                    span { class: "count", "{count}" }
-                }
-            }
-        }
 
         if columns.is_empty() {
             div { class: "note", Icon { svg: icons::INFO } "All columns are hidden. Use the Columns menu to show some." }
@@ -258,7 +256,7 @@ pub fn Kanban(board: String, iteration: Option<String>) -> Element {
                 div { class: "board", style: "{grid_style}",
                     for (i, h) in header_cols.iter().enumerate() {
                         div { key: "h-{h.id}", class: "colhead", style: "--i: {i}",
-                            StatePill { state: h.name.clone(), category: h.category }
+                            StatePill { state: h.name.clone(), category: h.category, color: h.color.clone() }
                             span { class: "count", "{h.shown}" }
                             if h.limit > 0 {
                                 span { class: if h.total > h.limit as usize { "wip over" } else { "wip" }, title: "WIP limit", "{h.total}/{h.limit}" }
@@ -292,6 +290,7 @@ struct ColumnHead {
     id: String,
     name: String,
     category: kanban_core::StateCategory,
+    color: String,
     shown: usize,
     total: usize,
     limit: u32,
@@ -304,16 +303,22 @@ fn column_head(
     visible: &HashSet<CardId>,
 ) -> ColumnHead {
     let ids = b.placement.get(&c.id).cloned().unwrap_or_default();
-    let category = c
-        .state_mappings
+    // The board's first type that this column maps (stable, unlike HashMap order).
+    let mapping = b
+        .work_item_types
         .iter()
-        .next()
+        .find_map(|t| c.state_mappings.get(t).map(|s| (t, s)));
+    let category = mapping
         .map(|(t, s)| ws.states.category(t, s))
         .unwrap_or(kanban_core::StateCategory::Unknown);
+    let color = mapping
+        .map(|(t, s)| ws.states.color(t, s))
+        .unwrap_or_else(|| category.default_color().to_owned());
     ColumnHead {
         id: c.id.clone(),
         name: c.name.clone(),
         category,
+        color,
         shown: ids.iter().filter(|id| visible.contains(id)).count(),
         total: ids.len(),
         limit: c.item_limit,
@@ -356,9 +361,13 @@ fn Lane(
             (c.clone(), cards, all.len())
         })
         .collect();
-    let categories: std::collections::HashMap<CardId, kanban_core::StateCategory> = cells
+    let categories: std::collections::HashMap<CardId, (kanban_core::StateCategory, String)> = cells
         .iter()
-        .flat_map(|(_, cards, _)| cards.iter().map(|c| (c.id, ws.category(c))))
+        .flat_map(|(_, cards, _)| {
+            cards
+                .iter()
+                .map(|c| (c.id, (ws.category(c), ws.state_color(c))))
+        })
         .collect();
     drop(ws_guard);
     let lane_total: usize = cells.iter().map(|(_, c, _)| c.len()).sum();
@@ -411,7 +420,7 @@ fn ColumnCell(
     total: usize,
     roots: std::collections::HashMap<CardId, CardId>,
     root_titles: std::collections::HashMap<CardId, String>,
-    categories: std::collections::HashMap<CardId, kanban_core::StateCategory>,
+    categories: std::collections::HashMap<CardId, (kanban_core::StateCategory, String)>,
 ) -> Element {
     let mut st = use_app();
     let slot = st.drop_slot.read().clone();
@@ -466,7 +475,7 @@ fn ColumnCell(
                 CardView {
                     index: i,
                     epic: roots.get(&card.id).and_then(|r| root_titles.get(r).map(|t| (*r, t.clone()))),
-                    category: categories.get(&card.id).copied().unwrap_or(kanban_core::StateCategory::Unknown),
+                    state: categories.get(&card.id).cloned().unwrap_or((kanban_core::StateCategory::Unknown, kanban_core::StateCategory::Unknown.default_color().to_owned())),
                     column_id: column.id.clone(),
                     lane_id: lane_id.clone(),
                     card,
@@ -522,7 +531,8 @@ fn CardView(
     card: Card,
     index: usize,
     epic: Option<(CardId, String)>,
-    category: kanban_core::StateCategory,
+    /// Category and ADO color of the card's state.
+    state: (kanban_core::StateCategory, String),
     column_id: String,
     lane_id: Option<String>,
 ) -> Element {
@@ -535,12 +545,13 @@ fn CardView(
         if dragging { " dragging" } else { "" },
         if pending { " pending" } else { "" }
     );
+    let (category, color) = state;
     let edit = card.clone();
     let tags: Vec<String> = card.tags.iter().take(3).cloned().collect();
     rsx! {
         article {
             class: "{class}",
-            style: "--i: {index}",
+            style: "--i: {index}; --sc: #{color}",
             draggable: "true",
             aria_label: "{card.work_item_type} {id}: {card.title}",
             ondragstart: move |e| {
@@ -590,66 +601,17 @@ fn CardView(
     }
 }
 
-#[component]
-fn ColumnsMenu(
-    project: String,
-    team: String,
-    board: String,
-    columns: Vec<String>,
-    hidden: Vec<String>,
-    on_close: EventHandler<()>,
-) -> Element {
-    let st = use_app();
-    rsx! {
-        div {
-            class: "popover",
-            role: "dialog",
-            aria_label: "Show columns",
-            onkeydown: move |e| if e.key() == Key::Escape { on_close.call(()) },
-            h3 { "Show columns" }
-            for name in columns {
-                label { key: "{name}", class: "check",
-                    input {
-                        r#type: "checkbox",
-                        checked: !hidden.contains(&name),
-                        onchange: {
-                            let name = name.clone();
-                            let hidden = hidden.clone();
-                            let (project, team, board) = (project.clone(), team.clone(), board.clone());
-                            move |e: FormEvent| {
-                                let mut h = hidden.clone();
-                                if e.checked() { h.retain(|x| *x != name); } else if !h.contains(&name) { h.push(name.clone()); }
-                                save_hidden(st, &project, &team, &board, h);
-                            }
-                        },
-                    }
-                    "{name}"
-                }
-            }
-            div { class: "foot",
-                button {
-                    class: "link",
-                    r#type: "button",
-                    onclick: {
-                        let (project, team, board) = (project.clone(), team.clone(), board.clone());
-                        move |_| {
-                            save_hidden(st, &project, &team, &board, Vec::new());
-                            on_close.call(());
-                        }
-                    },
-                    "Show all"
-                }
-                button { class: "link", r#type: "button", style: "float: right", onclick: move |_| on_close.call(()), "Done" }
-            }
-        }
-    }
-}
-
-fn save_hidden(mut st: AppState, project: &str, team: &str, board: &str, hidden: Vec<String>) {
+fn save_board_prefs(
+    mut st: AppState,
+    project: &str,
+    team: &str,
+    board: &str,
+    f: impl FnOnce(&mut kanban_core::BoardPrefs),
+) {
     {
         let mut settings = st.settings.write();
         let mut prefs = settings.board_prefs(project, team, board);
-        prefs.hidden_columns = hidden;
+        f(&mut prefs);
         settings.set_board_prefs(project, team, board, prefs);
     }
     services::save_settings(st);

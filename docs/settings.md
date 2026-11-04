@@ -29,6 +29,7 @@ The Setup view creates this file on first run. Start from
 | `cache_enabled`          | bool    | `true`                  | Persist the last board snapshot for instant startup |
 | `log_level`              | string  | `info`                  | `tracing` filter (`RUST_LOG` syntax). `RUST_LOG` overrides it |
 | `last_view`              | string? | none                    | Last tab on the board screen: `list`, `kanban` or `timeline` |
+| `timeline_info_width`    | int?    | none (560)              | Width in px of the Timeline's item list, set by dragging the separator |
 | `api.base_url`           | string  | `https://dev.azure.com` | ADO host |
 | `api.api_version`        | string  | `7.1`                   | api-version for all stable endpoints |
 | `api.max_batch`          | int     | `200`                   | Ids per `workitemsbatch` call. The ADO maximum is 200 |
@@ -44,10 +45,42 @@ them on the kanban. Delete a table to reset that board.
 | Key              | Type     | Default | Meaning |
 |------------------|----------|---------|---------|
 | `hidden_columns` | string[] | `[]`    | Column names hidden on that board (from the *Columns* menu) |
+| `epic`           | int?     | none    | Epic the kanban is filtered to (from the *Epic* picker) |
+| `assignees`      | string[] | `[]`    | Kanban *Assigned to* filter: `@me`, `@unassigned` or a `uniqueName` |
+| `areas`          | string[] | `[]`    | Kanban *Area* filter: area paths, each including the areas below it |
 
 ```toml
 [boards."IT Finance/IT Finance Team/Stories"]
 hidden_columns = ["TEST-FAILED", "Closed"]
+epic = 118181
+assignees = ["@me"]
+```
+
+### Per-team filters
+
+`[views."<project>/<team>"]` tables hold the board screen's filters, so they survive tab switches
+and relaunches. The iteration is shared by every tab; the List and the Timeline each keep their
+own filter bar in a `list` and a `timeline` sub-table (the Kanban's is in `[boards…]` above). The
+search box is not saved. Empty lists mean "no filter".
+
+| Key                     | Type     | Default | Meaning |
+|-------------------------|----------|---------|---------|
+| `iteration`             | string?  | none    | Iteration path from the header picker (includes child iterations) |
+| `<tab>.epic_states`     | string[] | `[]`    | Epic states shown |
+| `<tab>.assignees`       | string[] | `[]`    | `@me`, `@unassigned` or a `uniqueName` |
+| `<tab>.areas`           | string[] | `[]`    | Area paths, each including the areas below it |
+| `<tab>.item_states`     | string[] | `[]`    | Work item states shown. Offered: the states of the kanban columns that aren't hidden |
+
+```toml
+[views."IT Finance/IT Finance Team"]
+iteration = "IT Finance\\Sprint 12"
+
+[views."IT Finance/IT Finance Team".list]
+epic_states = ["New", "Active"]
+assignees = ["@me"]
+
+[views."IT Finance/IT Finance Team".timeline]
+item_states = ["Active", "Blocked"]
 ```
 
 Unknown keys are ignored. The app rewrites the file when settings change in the UI.

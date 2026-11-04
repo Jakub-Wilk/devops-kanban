@@ -1,0 +1,15 @@
+{
+  "count": 10,
+  "value": [
+    { "name": "New", "color": "b2b2b2", "category": "Proposed" },
+    { "name": "Active", "color": "007acc", "category": "InProgress" },
+    { "name": "Blocked", "color": "b20b1e", "category": "InProgress" },
+    { "name": "Paused", "color": "f599a2", "category": "InProgress" },
+    { "name": "Ready", "color": "292e6b", "category": "InProgress" },
+    { "name": "Done", "color": "FF9D00", "category": "Resolved" },
+    { "name": "TEST-ACTIVE", "color": "fbd144", "category": "Resolved" },
+    { "name": "TEST-FAILED", "color": "e60017", "category": "Resolved" },
+    { "name": "Closed", "color": "339933", "category": "Completed" },
+    { "name": "Removed", "color": "ffffff", "category": "Removed" }
+  ]
+}

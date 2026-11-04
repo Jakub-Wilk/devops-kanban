@@ -1,8 +1,9 @@
-//! Timeline layout: items on a week grid by target date.
+//! Timeline layout: items on an unbounded week grid by target date.
 //!
-//! Weeks start on Monday and are [`WEEK_PX`] wide. The range covers every dated item plus today,
-//! with two weeks of padding after the latest date and at least two before today. Items are
-//! sorted earliest target first; undated items come last.
+//! Weeks start on Monday and are [`WEEK_PX`] wide; x = 0 is the Monday of today's week and the
+//! axis extends without limit both ways, so the view can pan anywhere. [`TimelineLayout::spans`]
+//! builds the month and week headers for just the visible window. Items are sorted earliest
+//! target first; undated items come last.
 
 use serde::{Deserialize, Serialize};
 use time::{Date, Duration, Month};
@@ -43,58 +44,16 @@ pub struct RowLayout {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TimelineLayout {
-    pub start: Date,
-    pub width: f64,
+    /// x = 0: Monday of today's week.
+    pub origin: Date,
     pub today_x: f64,
-    pub months: Vec<Span>,
-    pub weeks: Vec<Span>,
     pub rows: Vec<RowLayout>,
 }
 
 impl TimelineLayout {
     pub fn build(today: Date, items: &[TimelineItem]) -> Self {
-        let dated: Vec<Date> = items.iter().filter_map(|i| i.target).collect();
-        let earliest = dated
-            .iter()
-            .copied()
-            .chain([today - Duration::weeks(2)])
-            .min()
-            .unwrap_or(today);
-        let latest = dated.iter().copied().chain([today]).max().unwrap_or(today);
-        let start = earliest - Duration::days(earliest.weekday().number_days_from_monday().into());
-        let n_weeks = ((latest + Duration::weeks(2) - start).whole_days() as f64 / 7.0)
-            .ceil()
-            .max(1.0) as i64;
-        let end = start + Duration::weeks(n_weeks);
-        let width = n_weeks as f64 * WEEK_PX;
-        let x = |d: Date| (d - start).whole_days() as f64 * DAY_PX;
-
-        let weeks = (0..n_weeks)
-            .map(|i| {
-                let ws = start + Duration::weeks(i);
-                Span {
-                    label: format!("{} {}", ws.day(), short_month(ws.month())),
-                    left: i as f64 * WEEK_PX,
-                    width: WEEK_PX,
-                    current: today >= ws && today < ws + Duration::weeks(1),
-                }
-            })
-            .collect();
-
-        let mut months = Vec::new();
-        let mut m = Date::from_calendar_date(start.year(), start.month(), 1).unwrap_or(start);
-        while m < end {
-            let next = next_month(m);
-            let left = x(m).max(0.0);
-            let right = x(next).min(width);
-            months.push(Span {
-                label: format!("{} {}", short_month(m.month()), m.year()),
-                left,
-                width: right - left,
-                current: today >= m && today < next,
-            });
-            m = next;
-        }
+        let origin = today - Duration::days(today.weekday().number_days_from_monday().into());
+        let x = |d: Date| (d - origin).whole_days() as f64 * DAY_PX;
 
         let mut sorted: Vec<&TimelineItem> = items.iter().collect();
         sorted.sort_by(|a, b| match (a.target, b.target) {
@@ -126,25 +85,55 @@ impl TimelineLayout {
             .collect();
 
         Self {
-            start,
-            width,
+            origin,
             today_x,
-            months,
-            weeks,
             rows,
         }
     }
 
-    /// The date under horizontal offset `x` (for dragging a marker), clamped to the range.
+    /// The date under horizontal offset `x` (any x, past or future).
     pub fn date_at(&self, x: f64) -> Date {
-        let max_days = (self.width / DAY_PX).floor() as i64 - 1;
-        let days = ((x / DAY_PX).floor() as i64).clamp(0, max_days.max(0));
-        self.start + Duration::days(days)
+        self.origin + Duration::days((x / DAY_PX).floor() as i64)
     }
 
     /// Centre x of `date`.
     pub fn x_of(&self, date: Date) -> f64 {
-        (date - self.start).whole_days() as f64 * DAY_PX + DAY_PX / 2.0
+        (date - self.origin).whole_days() as f64 * DAY_PX + DAY_PX / 2.0
+    }
+
+    /// Months (clipped to the window, so their labels stay visible) and weeks overlapping
+    /// `[x0, x1)`. `current` marks the ones containing today.
+    pub fn spans(&self, x0: f64, x1: f64) -> (Vec<Span>, Vec<Span>) {
+        let today = self.date_at(self.today_x);
+        let left = |d: Date| (d - self.origin).whole_days() as f64 * DAY_PX;
+
+        let weeks = ((x0 / WEEK_PX).floor() as i64..(x1 / WEEK_PX).ceil() as i64)
+            .map(|i| {
+                let ws = self.origin + Duration::weeks(i);
+                Span {
+                    label: format!("{} {}", ws.day(), short_month(ws.month())),
+                    left: i as f64 * WEEK_PX,
+                    width: WEEK_PX,
+                    current: today >= ws && today < ws + Duration::weeks(1),
+                }
+            })
+            .collect();
+
+        let mut months = Vec::new();
+        let first = self.date_at(x0);
+        let mut m = Date::from_calendar_date(first.year(), first.month(), 1).unwrap_or(first);
+        while left(m) < x1 {
+            let next = next_month(m);
+            let (l, r) = (left(m).max(x0), left(next).min(x1));
+            months.push(Span {
+                label: format!("{} {}", short_month(m.month()), m.year()),
+                left: l,
+                width: r - l,
+                current: today >= m && today < next,
+            });
+            m = next;
+        }
+        (months, weeks)
     }
 }
 
@@ -189,7 +178,7 @@ mod tests {
     }
 
     #[test]
-    fn starts_on_monday_and_sorts_undated_last() {
+    fn origin_is_monday_and_undated_sort_last() {
         let today = date!(2026 - 11 - 04); // Wednesday
         let l = TimelineLayout::build(
             today,
@@ -199,15 +188,14 @@ mod tests {
                 item(3, Some(date!(2026 - 10 - 16)), false),
             ],
         );
-        assert_eq!(l.start.weekday(), time::Weekday::Monday);
-        assert!(l.start <= date!(2026 - 10 - 16));
+        assert_eq!(l.origin, date!(2026 - 11 - 02));
         assert_eq!(
             l.rows.iter().map(|r| r.id).collect::<Vec<_>>(),
             vec![3, 2, 1]
         );
         assert!(l.rows[2].marker_x.is_none());
-        assert!(l.weeks.iter().filter(|w| w.current).count() == 1);
-        assert!(l.width >= l.x_of(date!(2026 - 12 - 11)) + WEEK_PX);
+        assert!(l.rows[0].marker_x.unwrap() < 0.0); // before the origin
+        assert_eq!(l.date_at(l.today_x), today);
     }
 
     #[test]
@@ -227,29 +215,32 @@ mod tests {
     }
 
     #[test]
-    fn date_at_round_trips_x_of() {
-        let l = TimelineLayout::build(
-            date!(2026 - 11 - 04),
-            &[item(1, Some(date!(2027 - 01 - 29)), true)],
-        );
+    fn date_at_round_trips_x_of_in_past_and_future() {
+        let l = TimelineLayout::build(date!(2026 - 11 - 04), &[]);
         for d in [
+            date!(2019 - 02 - 28),
+            date!(2026 - 11 - 01),
             date!(2026 - 11 - 04),
-            date!(2026 - 12 - 25),
-            date!(2027 - 01 - 29),
+            date!(2031 - 07 - 15),
         ] {
             assert_eq!(l.date_at(l.x_of(d)), d);
         }
-        assert_eq!(l.date_at(-500.0), l.start);
     }
 
     #[test]
-    fn months_cover_the_track() {
-        let l = TimelineLayout::build(
-            date!(2026 - 11 - 04),
-            &[item(1, Some(date!(2027 - 03 - 26)), true)],
+    fn spans_cover_the_window_across_a_year_boundary() {
+        let l = TimelineLayout::build(date!(2026 - 11 - 04), &[]);
+        let (x0, x1) = (l.x_of(date!(2026 - 12 - 10)), l.x_of(date!(2027 - 02 - 03)));
+        let (months, weeks) = l.spans(x0, x1);
+        let total: f64 = months.iter().map(|m| m.width).sum();
+        assert!((total - (x1 - x0)).abs() < 0.01);
+        assert_eq!(
+            months.iter().map(|m| m.label.as_str()).collect::<Vec<_>>(),
+            ["Dec 2026", "Jan 2027", "Feb 2027"]
         );
-        let total: f64 = l.months.iter().map(|m| m.width).sum();
-        assert!((total - l.width).abs() < 0.01);
-        assert_eq!(l.months.first().unwrap().label, "Oct 2026");
+        assert!(weeks.first().unwrap().left <= x0 && weeks.last().unwrap().left + WEEK_PX >= x1);
+        assert!(weeks.iter().all(|w| !w.current));
+        let (_, now) = l.spans(0.0, WEEK_PX);
+        assert!(now[0].current);
     }
 }

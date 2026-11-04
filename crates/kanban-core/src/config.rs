@@ -26,10 +26,14 @@ pub struct Settings {
     pub log_level: String,
     /// Last tab shown on the board screen: `list`, `kanban` or `timeline`.
     pub last_view: Option<String>,
+    /// Width in px of the Timeline's item list (the separator position).
+    pub timeline_info_width: Option<u32>,
     pub api: ApiSettings,
     pub time_tracking: TimeTrackingSettings,
     /// Per-board UI preferences, keyed `"<project>/<team>/<board>"`.
     pub boards: BTreeMap<String, BoardPrefs>,
+    /// Per-team filters of the List and Timeline tabs, keyed `"<project>/<team>"`.
+    pub views: BTreeMap<String, ViewPrefs>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -55,6 +59,34 @@ pub struct TimeTrackingSettings {
 pub struct BoardPrefs {
     /// Column names hidden on the kanban.
     pub hidden_columns: Vec<String>,
+    /// Epic the kanban is filtered to.
+    pub epic: Option<u32>,
+    /// Assignee filter of the kanban (see [`TabFilters::assignees`]).
+    pub assignees: Vec<String>,
+    /// Area filter of the kanban (see [`TabFilters::areas`]).
+    pub areas: Vec<String>,
+}
+
+/// Filters of one team's board screen. The search box is not saved.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ViewPrefs {
+    /// Iteration path from the header picker, shared by every tab.
+    pub iteration: Option<String>,
+    pub list: TabFilters,
+    pub timeline: TabFilters,
+}
+
+/// The filter bar of the List or the Timeline. Empty lists mean "no filter".
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TabFilters {
+    pub epic_states: Vec<String>,
+    /// `@me`, `@unassigned` or a `unique_name` (see [`crate::filters`]).
+    pub assignees: Vec<String>,
+    /// Area paths; each also matches the areas below it.
+    pub areas: Vec<String>,
+    pub item_states: Vec<String>,
 }
 
 impl Default for Settings {
@@ -68,9 +100,11 @@ impl Default for Settings {
             cache_enabled: true,
             log_level: "info".into(),
             last_view: None,
+            timeline_info_width: None,
             api: ApiSettings::default(),
             time_tracking: TimeTrackingSettings::default(),
             boards: BTreeMap::new(),
+            views: BTreeMap::new(),
         }
     }
 }
@@ -169,6 +203,26 @@ impl Settings {
             self.boards.insert(key, prefs);
         }
     }
+
+    pub fn view_key(project: &str, team: &str) -> String {
+        format!("{project}/{team}")
+    }
+
+    pub fn view_prefs(&self, project: &str, team: &str) -> ViewPrefs {
+        self.views
+            .get(&Self::view_key(project, team))
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    pub fn set_view_prefs(&mut self, project: &str, team: &str, prefs: ViewPrefs) {
+        let key = Self::view_key(project, team);
+        if prefs == ViewPrefs::default() {
+            self.views.remove(&key);
+        } else {
+            self.views.insert(key, prefs);
+        }
+    }
 }
 
 /// The ADO PAT: `DEVOPS_KANBAN_PAT`, else the keyring. `Ok(None)` when not stored.
@@ -243,6 +297,9 @@ mod tests {
             "Stories",
             BoardPrefs {
                 hidden_columns: vec!["Closed".into(), "TEST-FAILED".into()],
+                epic: Some(118181),
+                assignees: vec!["@me".into()],
+                areas: vec!["IT Finance\\Penny".into()],
             },
         );
         let back = Settings::from_toml(&s.to_toml().unwrap()).unwrap();
@@ -251,6 +308,11 @@ mod tests {
                 .hidden_columns,
             vec!["Closed", "TEST-FAILED"]
         );
+        assert_eq!(
+            back.board_prefs("IT Finance", "IT Finance Team", "Stories")
+                .epic,
+            Some(118181)
+        );
         s.set_board_prefs(
             "IT Finance",
             "IT Finance Team",
@@ -258,5 +320,31 @@ mod tests {
             BoardPrefs::default(),
         );
         assert!(s.boards.is_empty());
+    }
+
+    #[test]
+    fn view_prefs_round_trip() {
+        let mut s = Settings {
+            organization: "o".into(),
+            ..Settings::default()
+        };
+        let prefs = ViewPrefs {
+            iteration: Some("IT Finance\\Sprint 1".into()),
+            list: TabFilters {
+                epic_states: vec!["New".into(), "Active".into()],
+                assignees: vec!["@me".into(), "@unassigned".into()],
+                areas: vec!["IT Finance\\Rozwój".into()],
+                item_states: vec!["Blocked".into()],
+            },
+            timeline: TabFilters {
+                assignees: vec!["@me".into()],
+                ..TabFilters::default()
+            },
+        };
+        s.set_view_prefs("IT Finance", "IT Finance Team", prefs.clone());
+        let back = Settings::from_toml(&s.to_toml().unwrap()).unwrap();
+        assert_eq!(back.view_prefs("IT Finance", "IT Finance Team"), prefs);
+        s.set_view_prefs("IT Finance", "IT Finance Team", ViewPrefs::default());
+        assert!(s.views.is_empty());
     }
 }

@@ -1,5 +1,6 @@
-//! Everything one project/team screen needs, loaded in one go: backlog levels, state categories,
-//! each level's board, the cards of every level, iterations and the signed-in user.
+//! Everything one project/team screen needs, loaded in one go: backlog levels, state categories
+//! and colors, type colors, each level's board, the cards of every level, iterations and the
+//! signed-in user.
 //!
 //! A board that ADO can't serve (some teams always get HTTP 500) is recorded in `board_errors`;
 //! the rest of the workspace still loads.
@@ -52,17 +53,21 @@ pub struct Workspace {
     /// Team field values (area paths) for pickers.
     pub areas: Vec<String>,
     pub me: Option<Person>,
+    /// Work item type → color (hex without `#`), as ADO shows it.
+    #[serde(default)]
+    pub type_colors: HashMap<String, String>,
     /// Newest `System.ChangedDate` seen; the next delta sync starts here.
     pub synced_to: Option<OffsetDateTime>,
 }
 
 impl Workspace {
     pub async fn load(client: &AdoClient, project: &str, team: &str) -> Result<Self, CoreError> {
-        let (backlog, team_values, iterations, me) = tokio::join!(
+        let (backlog, team_values, iterations, me, types) = tokio::join!(
             client.backlog_configuration(project, team),
             client.team_field_values(project, team),
             client.iterations(project, team, false),
             client.connection_data(),
+            client.work_item_types(project),
         );
         let backlog = backlog.map_err(|e| match e {
             ado_client::AdoError::Api {
@@ -72,7 +77,7 @@ impl Workspace {
         })?;
         let team_values = team_values?;
         let levels = levels_of(&backlog);
-        let states = StateMap::from_backlog(&backlog);
+        let mut states = StateMap::from_backlog(&backlog);
 
         // Board config per level, concurrently. Failures are per board.
         let mut set = JoinSet::new();
@@ -121,6 +126,25 @@ impl Workspace {
             .collect();
         work_item_types.sort();
         work_item_types.dedup();
+
+        // State colors per type, concurrently. Without them pills fall back to category colors.
+        let mut set = JoinSet::new();
+        for t in &work_item_types {
+            let (client, project, t) = (client.clone(), project.to_owned(), t.clone());
+            set.spawn(async move {
+                let res = client.work_item_type_states(&project, &t).await;
+                (t, res)
+            });
+        }
+        while let Some(joined) = set.join_next().await {
+            match joined {
+                Ok((t, Ok(dtos))) => states.set_colors(&t, &dtos),
+                Ok((t, Err(e))) => {
+                    tracing::warn!(work_item_type = %t, error = %e, "no state colors")
+                }
+                Err(_) => {}
+            }
+        }
         let order_field = backlog
             .backlog_fields
             .type_fields
@@ -168,6 +192,10 @@ impl Workspace {
                     unique_name: u.account()?,
                 })
             }),
+            type_colors: types
+                .inspect_err(|e| tracing::warn!(error = %e, "no work item type colors"))
+                .map(|t| type_colors(&t))
+                .unwrap_or_default(),
             synced_to: None,
         };
         ws.upsert(&dtos);
@@ -240,12 +268,33 @@ impl Workspace {
         self.states.category(&card.work_item_type, &card.state)
     }
 
+    /// The type's ADO color (hex without `#`), gray when unknown.
+    pub fn type_color(&self, work_item_type: &str) -> String {
+        self.type_colors
+            .get(work_item_type)
+            .cloned()
+            .unwrap_or_else(|| StateCategory::Unknown.default_color().to_owned())
+    }
+
+    /// The card's state color (hex without `#`).
+    pub fn state_color(&self, card: &Card) -> String {
+        self.states.color(&card.work_item_type, &card.state)
+    }
+
     /// The level a work item type belongs to.
     pub fn level_of_type(&self, work_item_type: &str) -> Option<&BacklogLevel> {
         self.levels
             .iter()
             .find(|l| l.work_item_types.iter().any(|t| t == work_item_type))
     }
+}
+
+/// Type name → color (hex without `#`, lowercase).
+pub fn type_colors(types: &[ado_client::WorkItemTypeDto]) -> HashMap<String, String> {
+    types
+        .iter()
+        .filter_map(|t| Some((t.name.clone(), t.color.clone()?.to_ascii_lowercase())))
+        .collect()
 }
 
 /// Visible portfolio levels (highest rank first) followed by the requirement level.

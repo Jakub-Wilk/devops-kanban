@@ -1,10 +1,11 @@
 //! State categories (`Proposed`/`InProgress`/`Resolved`/`Completed`/`Removed`) per work item type,
-//! from `backlogconfiguration.workItemTypeMappedStates`. This is how the app reasons about custom
-//! states without hardcoding their names.
+//! from `backlogconfiguration.workItemTypeMappedStates`, plus each state's color from
+//! `wit/workitemtypes/{type}/states`. This is how the app reasons about custom states without
+//! hardcoding their names.
 
 use std::collections::HashMap;
 
-use ado_client::BacklogConfigurationDto;
+use ado_client::{BacklogConfigurationDto, WorkItemStateDto};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -34,6 +35,17 @@ impl StateCategory {
         matches!(self, Self::Resolved | Self::Completed)
     }
 
+    /// ADO's default color for the category (hex without `#`), used when a state has none.
+    pub fn default_color(self) -> &'static str {
+        match self {
+            Self::Proposed => "b2b2b2",
+            Self::InProgress => "007acc",
+            Self::Resolved => "ff9d00",
+            Self::Completed => "339933",
+            Self::Removed | Self::Unknown => "6b7686",
+        }
+    }
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Proposed => "Proposed",
@@ -50,6 +62,9 @@ impl StateCategory {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct StateMap {
     types: HashMap<String, Vec<(String, StateCategory)>>,
+    /// Work item type → state → color (hex without `#`), as ADO shows it.
+    #[serde(default)]
+    colors: HashMap<String, HashMap<String, String>>,
 }
 
 impl StateMap {
@@ -76,7 +91,32 @@ impl StateMap {
                 (t.work_item_type_name.clone(), states)
             })
             .collect();
-        Self { types }
+        Self {
+            types,
+            colors: HashMap::new(),
+        }
+    }
+
+    /// Records the colors of one type's states.
+    pub fn set_colors(&mut self, work_item_type: &str, states: &[WorkItemStateDto]) {
+        let colors = states
+            .iter()
+            .filter_map(|s| Some((s.name.clone(), s.color.clone()?.to_ascii_lowercase())))
+            .collect();
+        self.colors.insert(work_item_type.to_owned(), colors);
+    }
+
+    /// The state's ADO color (hex without `#`), else its category's default.
+    pub fn color(&self, work_item_type: &str, state: &str) -> String {
+        self.colors
+            .get(work_item_type)
+            .and_then(|c| c.get(state))
+            .cloned()
+            .unwrap_or_else(|| {
+                self.category(work_item_type, state)
+                    .default_color()
+                    .to_owned()
+            })
     }
 
     pub fn category(&self, work_item_type: &str, state: &str) -> StateCategory {

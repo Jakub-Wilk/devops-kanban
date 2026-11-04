@@ -1,34 +1,23 @@
 //! "List" tab: epics in backlog order, each expandable to its features and stories.
-//! Rows can be dragged to reorder (siblings only), which goes through `workitemsorder`.
+//! Rows can be dragged to reorder (siblings only), which goes through `workitemsorder`. Each row
+//! has a stripe in its work item type's ADO color.
 
 use std::collections::HashSet;
 
 use dioxus::prelude::*;
 use kanban_core::{Card, CardId, Workspace};
 
+use crate::components::filters::{ItemFilters, ItemTab, view_prefs};
 use crate::components::icons;
 use crate::components::item_dialog::{open_edit, open_new};
 use crate::components::widgets::{Assignee, DateLabel, Icon, Prio, StatePill};
 use crate::services;
 use crate::state::{Drag, use_app};
 
-/// Does the card match the header's iteration filter?
-pub fn in_iteration(card: &Card, iteration: &Option<String>) -> bool {
-    iteration.as_ref().is_none_or(|it| {
-        card.iteration_path == *it
-            || (card.iteration_path.starts_with(it.as_str())
-                && card.iteration_path[it.len()..].starts_with('\\'))
-    })
-}
-
 #[component]
-pub fn EpicList(
-    iteration: Option<String>,
-    search_focus: Signal<Option<std::rc::Rc<MountedData>>>,
-) -> Element {
+pub fn EpicList(search_focus: Signal<Option<std::rc::Rc<MountedData>>>) -> Element {
     let mut st = use_app();
     let mut query = use_signal(String::new);
-    let mut state_filter = use_signal(|| None::<String>);
     let mut open = use_signal(HashSet::<CardId>::new);
     let mut over = use_signal(|| None::<CardId>);
 
@@ -48,37 +37,35 @@ pub fn EpicList(
         })
         .collect();
     let q = query.read().trim().to_lowercase();
-    let filter = state_filter.read().clone();
+    let view = view_prefs(st, ws);
 
     let matches_text = |c: &Card| {
         q.is_empty() || c.title.to_lowercase().contains(&q) || c.id.to_string().contains(&q)
     };
-    let rows: Vec<(Card, Vec<(Card, u8)>)> = hierarchy
-        .roots
-        .iter()
-        .filter_map(|id| ws.cards.get(id))
-        .filter_map(|epic| {
-            let kids: Vec<(Card, u8)> = hierarchy
-                .children
-                .get(&epic.id)
-                .into_iter()
-                .flatten()
-                .filter_map(|(id, depth)| ws.cards.get(id).map(|c| (c.clone(), *depth)))
-                .filter(|(c, _)| in_iteration(c, &iteration))
-                .collect();
-            let state_ok = filter.as_ref().is_none_or(|s| *s == epic.state);
-            let text_ok = matches_text(epic) || kids.iter().any(|(c, _)| matches_text(c));
-            let iter_ok = iteration.is_none() || in_iteration(epic, &iteration) || !kids.is_empty();
-            (state_ok && text_ok && iter_ok).then(|| (epic.clone(), kids))
-        })
-        .collect();
+    let rows: Vec<(Card, Vec<(Card, u8)>)> = kanban_core::filters::epic_rows(
+        ws,
+        &hierarchy,
+        &view.list,
+        view.iteration.as_deref(),
+        matches_text,
+    )
+    .into_iter()
+    .map(|(e, kids)| {
+        (
+            e.clone(),
+            kids.into_iter().map(|(c, d)| (c.clone(), d)).collect(),
+        )
+    })
+    .collect();
 
-    let mut states: Vec<String> = root_types
-        .iter()
-        .flat_map(|t| ws.states.states(t))
-        .collect();
-    states.dedup();
     let visible_roots: Vec<CardId> = rows.iter().map(|(e, _)| e.id).collect();
+    let (all_open, none_open) = {
+        let o = open.read();
+        (
+            visible_roots.iter().all(|id| o.contains(id)),
+            !visible_roots.iter().any(|id| o.contains(id)),
+        )
+    };
     let progress: Vec<(usize, usize)> = rows
         .iter()
         .map(|(e, _)| hierarchy.progress(e.id, &ws.cards, &ws.states))
@@ -87,8 +74,20 @@ pub fn EpicList(
         .iter()
         .map(|(e, kids)| {
             (
-                ws.category(e),
-                kids.iter().map(|(c, _)| ws.category(c)).collect::<Vec<_>>(),
+                (
+                    ws.category(e),
+                    ws.state_color(e),
+                    ws.type_color(&e.work_item_type),
+                ),
+                kids.iter()
+                    .map(|(c, _)| {
+                        (
+                            ws.category(c),
+                            ws.state_color(c),
+                            ws.type_color(&c.work_item_type),
+                        )
+                    })
+                    .collect::<Vec<_>>(),
             )
         })
         .collect();
@@ -128,28 +127,30 @@ pub fn EpicList(
                 }
                 kbd { "/" }
             }
-            div { class: "toolbar", role: "group", aria_label: "Filter by state",
+            div { class: "seg-icons", role: "group", aria_label: "Expand or collapse epics",
                 button {
-                    class: if filter.is_none() { "chip on" } else { "chip" },
+                    class: "ghost icon-only",
                     r#type: "button",
-                    aria_pressed: "{filter.is_none()}",
-                    onclick: move |_| state_filter.set(None),
-                    "All"
+                    title: "Expand all",
+                    aria_label: "Expand all",
+                    disabled: all_open,
+                    onclick: {
+                        let ids = visible_roots.clone();
+                        move |_| open.set(ids.iter().copied().collect())
+                    },
+                    Icon { svg: icons::PLUS }
                 }
-                for s in states {
-                    button {
-                        key: "{s}",
-                        class: if filter.as_deref() == Some(s.as_str()) { "chip on" } else { "chip" },
-                        r#type: "button",
-                        aria_pressed: "{filter.as_deref() == Some(s.as_str())}",
-                        onclick: {
-                            let s = s.clone();
-                            move |_| state_filter.set(Some(s.clone()))
-                        },
-                        "{s}"
-                    }
+                button {
+                    class: "ghost icon-only",
+                    r#type: "button",
+                    title: "Collapse all",
+                    aria_label: "Collapse all",
+                    disabled: none_open,
+                    onclick: move |_| open.write().clear(),
+                    Icon { svg: icons::MINUS }
                 }
             }
+            ItemFilters { tab: ItemTab::List }
             div { class: "spacer" }
             button {
                 class: "primary",
@@ -165,7 +166,7 @@ pub fn EpicList(
         }
 
         section { class: "list", aria_label: "Epics",
-            for (i, ((epic, kids), ((done, total), (cat, kid_cats)))) in rows.into_iter().zip(progress.into_iter().zip(categories)).enumerate() {
+            for (i, ((epic, kids), ((done, total), ((cat, color, type_color), kid_cats)))) in rows.into_iter().zip(progress.into_iter().zip(categories)).enumerate() {
                 {
                     let id = epic.id;
                     let expanded = open.read().contains(&id);
@@ -197,7 +198,7 @@ pub fn EpicList(
                                 over.set(None);
                                 st.drag.set(None);
                             },
-                            div { class: "ehead",
+                            div { class: "ehead", style: "--tc: #{type_color}",
                                 span {
                                     class: "grip",
                                     draggable: "true",
@@ -239,7 +240,7 @@ pub fn EpicList(
                                     Icon { svg: icons::FOLDER }
                                     span { "{epic.area_leaf()}" }
                                 }
-                                StatePill { state: epic.state.clone(), category: cat }
+                                StatePill { state: epic.state.clone(), category: cat, color }
                                 div { class: "progress", title: "{done} of {total} work items done",
                                     div { class: "bar-track",
                                         div { class: "bar-fill", style: "width: {pct}%" }
@@ -254,12 +255,14 @@ pub fn EpicList(
                             div { class: if expanded { "expand open" } else { "expand" },
                                 div { class: "inner",
                                     div { class: "children",
-                                        for ((child, depth), ccat) in kids.into_iter().zip(kid_cats) {
+                                        for ((child, depth), (ccat, ccolor, ctype)) in kids.into_iter().zip(kid_cats) {
                                             ChildRow {
                                                 key: "{child.id}",
                                                 card: child,
                                                 depth,
                                                 category: ccat,
+                                                color: ccolor,
+                                                type_color: ctype,
                                                 root: id,
                                                 siblings: kid_ids.clone(),
                                             }
@@ -299,6 +302,9 @@ fn ChildRow(
     card: Card,
     depth: u8,
     category: kanban_core::StateCategory,
+    color: String,
+    /// The work item type's ADO color, for the stripe.
+    type_color: String,
     root: CardId,
     siblings: Vec<CardId>,
 ) -> Element {
@@ -327,6 +333,7 @@ fn ChildRow(
     rsx! {
         div {
             class: "{class}",
+            style: "--tc: #{type_color}",
             ondragover: move |e| {
                 if matches!(*st.drag.peek(), Some(Drag::Row { root: Some(r), .. }) if r == root) {
                     e.prevent_default();
@@ -375,7 +382,7 @@ fn ChildRow(
                 }
             }
             span { style: "width: 104px", DateLabel { date: card.target_date, open: !category.is_done() } }
-            StatePill { state: card.state.clone(), category }
+            StatePill { state: card.state.clone(), category, color }
             Assignee { id, person: card.assigned_to.clone(), title: card.title.clone() }
             if pending { span { class: "spinner", style: "color: var(--accent)" } }
         }

@@ -73,6 +73,17 @@ pub struct ReorderResult {
     pub order: f64,
 }
 
+/// `GET wit/workitemtypes` (only the fields we use; the rest, e.g. `xmlForm`, is ignored).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkItemTypeDto {
+    pub name: String,
+    #[serde(default)]
+    pub color: Option<String>,
+    #[serde(default)]
+    pub is_disabled: bool,
+}
+
 /// `GET wit/workitemtypes/{type}/states`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

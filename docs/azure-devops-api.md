@@ -36,6 +36,7 @@ of 401, so treat any non-JSON 203 as `Unauthorized`. Required PAT scope: `vso.wo
 | Get one | `GET {p}/_apis/wit/workitems/{id}?$expand=relations` | 7.1 | Detail / refetch after conflict |
 | Update | `PATCH {p}/_apis/wit/workitems/{id}` | 7.1 | Move, edit (JSON Patch) |
 | Create | `POST {p}/_apis/wit/workitems/${type}` | 7.1 | New card (JSON Patch) |
+| WIT types | `GET {p}/_apis/wit/workitemtypes` | 7.1 | Type colours. Large response (includes `xmlForm`), so fetched once per load |
 | WIT states | `GET {p}/_apis/wit/workitemtypes/{type}/states` | 7.1 | State colours and categories |
 | Comments | `GET/POST {p}/_apis/wit/workItems/{id}/comments` | 7.1-preview.4 | Discussion |
 | Reorder | `PATCH {p}/{t}/_apis/work/workitemsorder` | 7.1 | Position within a column |

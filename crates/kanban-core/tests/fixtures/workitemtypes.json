@@ -1,0 +1,10 @@
+{
+  "count": 5,
+  "value": [
+    { "name": "Bug", "referenceName": "Microsoft.VSTS.WorkItemTypes.Bug", "color": "CC293D", "isDisabled": false },
+    { "name": "Epic", "referenceName": "Microsoft.VSTS.WorkItemTypes.Epic", "color": "E06C00", "isDisabled": false },
+    { "name": "Feature", "referenceName": "Microsoft.VSTS.WorkItemTypes.Feature", "color": "773B93", "isDisabled": false },
+    { "name": "Task", "referenceName": "Microsoft.VSTS.WorkItemTypes.Task", "color": "A4880A", "isDisabled": false },
+    { "name": "User Story", "referenceName": "Microsoft.VSTS.WorkItemTypes.UserStory", "color": "0098C7", "isDisabled": false }
+  ]
+}

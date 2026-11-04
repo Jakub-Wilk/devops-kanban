@@ -51,6 +51,7 @@ icon!(
 );
 icon!(PLUS, "16", "2.4", "<path d=\"M12 5v14M5 12h14\"/>");
 icon!(PLUS_14, "14", "2.4", "<path d=\"M12 5v14M5 12h14\"/>");
+icon!(MINUS, "16", "2.4", "<path d=\"M5 12h14\"/>");
 icon!(
     FOLDER,
     "14",

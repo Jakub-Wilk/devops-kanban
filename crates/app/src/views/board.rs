@@ -1,9 +1,13 @@
-//! One team's workspace: top bar, page head with the List / Kanban / Timeline tabs, and the
-//! active tab. `board` is the backlog level shown on the Kanban tab.
+//! One team's workspace: top bar (with the iteration filter), page head with the List / Kanban /
+//! Timeline tabs, and the active tab. `board` is the backlog level shown on the Kanban tab. Filters
+//! (each tab its own, the iteration shared) live in the settings, so they survive tab switches
+//! and relaunches.
 
 use dioxus::prelude::*;
+use kanban_core::filters;
 
-use crate::components::epic_list::{EpicList, in_iteration};
+use crate::components::epic_list::EpicList;
+use crate::components::filters::update_view_prefs;
 use crate::components::icons;
 use crate::components::kanban::Kanban;
 use crate::components::timeline::Timeline;
@@ -41,7 +45,6 @@ impl Tab {
 pub fn Board(project: String, team: String, board: String) -> Element {
     let mut st = use_app();
     let mut tab = use_signal(|| Tab::parse(st.settings.peek().last_view.as_deref()));
-    let mut iteration = use_signal(|| None::<String>);
     let search_focus = use_signal(|| None::<std::rc::Rc<MountedData>>);
 
     use_effect(move || {
@@ -72,26 +75,23 @@ pub fn Board(project: String, team: String, board: String) -> Element {
     let loaded = ws_guard
         .as_ref()
         .filter(|w| w.project == project && w.team == team);
+    let prefs = st.settings.read().view_prefs(&project, &team);
     let (counts, iterations, me) = match loaded {
         Some(ws) => {
-            let roots = ws.root_types();
-            let it = iteration.read().clone();
-            let list = ws
-                .cards
-                .values()
-                .filter(|c| roots.contains(&c.work_item_type))
-                .count();
+            // Same filters as the tabs (the List count ignores the search box).
+            let hierarchy = ws.hierarchy();
+            let iteration = prefs.iteration.as_deref();
+            let list = filters::epic_rows(ws, &hierarchy, &prefs.list, iteration, |_| true).len();
+            let board_prefs = st.settings.read().board_prefs(&project, &team, &board);
+            let epic = board_prefs.epic.filter(|e| hierarchy.roots.contains(e));
             let kanban = ws.boards.get(&board).map_or(0, |b| {
-                ws.cards
-                    .values()
-                    .filter(|c| b.shows(c) && in_iteration(c, &it))
+                filters::kanban_cards(ws, &hierarchy, b, epic, iteration)
+                    .into_iter()
+                    .filter(|c| filters::matches_board(c, &board_prefs, ws.me.as_ref()))
                     .count()
             });
-            let timeline = ws
-                .cards
-                .values()
-                .filter(|c| !roots.contains(&c.work_item_type) && in_iteration(c, &it))
-                .count();
+            let timeline =
+                filters::timeline_items(ws, &hierarchy, &prefs.timeline, iteration).len();
             (
                 Some((list, kanban, timeline)),
                 ws.iterations.clone(),
@@ -123,7 +123,7 @@ pub fn Board(project: String, team: String, board: String) -> Element {
             "Work items by target date, earliest first. Drag a diamond to reschedule.",
         ),
     };
-    let it_sel = iteration.read().clone();
+    let it_sel = prefs.iteration.clone();
 
     rsx! {
         div {
@@ -172,9 +172,12 @@ pub fn Board(project: String, team: String, board: String) -> Element {
                             class: "ghost",
                             aria_label: "Iteration",
                             style: "padding-left: 36px",
-                            onchange: move |e| {
-                                let v = e.value();
-                                iteration.set((!v.is_empty()).then_some(v));
+                            onchange: {
+                                let (p, t) = (project.clone(), team.clone());
+                                move |e: FormEvent| {
+                                    let v = e.value();
+                                    update_view_prefs(st, &p, &t, |prefs| prefs.iteration = (!v.is_empty()).then_some(v));
+                                }
                             },
                             option { value: "", selected: it_sel.is_none(), "All iterations" }
                             for i in iterations {
@@ -226,9 +229,9 @@ pub fn Board(project: String, team: String, board: String) -> Element {
                 } else {
                     main { key: "{current.key()}", class: "wrap panel",
                         match current {
-                            Tab::List => rsx! { EpicList { iteration: it_sel.clone(), search_focus } },
-                            Tab::Kanban => rsx! { Kanban { board: board.clone(), iteration: it_sel.clone() } },
-                            Tab::Timeline => rsx! { Timeline { iteration: it_sel.clone() } },
+                            Tab::List => rsx! { EpicList { search_focus } },
+                            Tab::Kanban => rsx! { Kanban { board: board.clone() } },
+                            Tab::Timeline => rsx! { Timeline {} },
                         }
                     }
                 }

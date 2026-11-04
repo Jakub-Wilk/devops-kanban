@@ -4,13 +4,15 @@
 //! - `PATCH {project}/_apis/wit/workitems/{id}` — `application/json-patch+json`; first op is
 //!   always `test /rev` for optimistic concurrency.
 //! - `POST {project}/_apis/wit/workitems/${type}` — create.
+//! - `GET {project}/_apis/wit/workitemtypes` — type colors.
 //! - `GET {project}/_apis/wit/workitemtypes/{type}/states` — state colors + categories.
 
 use reqwest::Method;
 
 use crate::client::{Request, Scope};
 use crate::models::{
-    ListResponse, PatchDocument, WorkItemDto, WorkItemStateDto, WorkItemsBatchRequest,
+    ListResponse, PatchDocument, WorkItemDto, WorkItemStateDto, WorkItemTypeDto,
+    WorkItemsBatchRequest,
 };
 use crate::{AdoClient, AdoError};
 
@@ -81,6 +83,19 @@ impl AdoClient {
             Request::new(Method::POST, Scope::Project(project), &path).json_patch(patch, None)?,
         )
         .await
+    }
+
+    /// Every work item type of the project. The response is large (it carries each type's form
+    /// layout), so call it once per load.
+    pub async fn work_item_types(&self, project: &str) -> Result<Vec<WorkItemTypeDto>, AdoError> {
+        let list: ListResponse<WorkItemTypeDto> = self
+            .send(Request::new(
+                Method::GET,
+                Scope::Project(project),
+                "wit/workitemtypes",
+            ))
+            .await?;
+        Ok(list.value)
     }
 
     pub async fn work_item_type_states(

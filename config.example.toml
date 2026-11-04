@@ -20,6 +20,15 @@ enabled = true
 base_url = "https://media-press.timehub.7pace.com"
 api_version = "3.2"
 
-# Per-board UI preferences, written by the app (Kanban → Columns menu).
+# Per-board UI preferences, written by the app (Kanban → Columns menu and filters).
 # [boards."IT Finance/IT Finance Team/Stories"]
 # hidden_columns = ["TEST-FAILED", "Closed"]
+# epic = 118181
+# assignees = ["@me"]
+
+# Per-team filters, written by the app: the iteration picker, and each tab's filter bar.
+# [views."IT Finance/IT Finance Team".list]
+# epic_states = ["New", "Active"]
+# assignees = ["@me"]
+# [views."IT Finance/IT Finance Team".timeline]
+# item_states = ["Active", "Blocked"]

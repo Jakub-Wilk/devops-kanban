@@ -30,11 +30,12 @@ pub fn slug(s: &str) -> String {
         .collect()
 }
 
+/// A state with its ADO `color` (hex without `#`).
 #[component]
-pub fn StatePill(state: String, category: StateCategory) -> Element {
+pub fn StatePill(state: String, category: StateCategory, color: String) -> Element {
     let class = format!("pill c-{} s-{}", category.as_str(), slug(&state));
     rsx! {
-        span { class: "{class}", i {} "{state}" }
+        span { class: "{class}", style: "--sc: #{color}", i {} "{state}" }
     }
 }
 

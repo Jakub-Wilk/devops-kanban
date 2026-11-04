@@ -213,3 +213,24 @@ fn card_settings_fields_are_fetched() {
     assert!(f.contains(&"Microsoft.VSTS.Scheduling.StoryPoints".to_owned()));
     assert!(f.contains(&ORDER.to_owned()));
 }
+
+#[test]
+fn state_colors_from_ado_with_category_fallback() {
+    let cfg: BacklogConfigurationDto = fixture("backlog_configuration.json");
+    let mut states = StateMap::from_backlog(&cfg);
+    assert_eq!(states.color("User Story", "Blocked"), "007acc"); // no colors yet: InProgress
+    let dtos: ListResponse<ado_client::WorkItemStateDto> =
+        fixture("workitemtype_states_story.json");
+    states.set_colors("User Story", &dtos.value);
+    assert_eq!(states.color("User Story", "Blocked"), "b20b1e");
+    assert_eq!(states.color("User Story", "Done"), "ff9d00");
+    assert_eq!(states.color("Feature", "Active"), "007acc");
+}
+
+#[test]
+fn type_colors_from_ado() {
+    let dtos: ListResponse<ado_client::WorkItemTypeDto> = fixture("workitemtypes.json");
+    let colors = kanban_core::workspace::type_colors(&dtos.value);
+    assert_eq!(colors["Epic"], "e06c00");
+    assert_eq!(colors["User Story"], "0098c7");
+}

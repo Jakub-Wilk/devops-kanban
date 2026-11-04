@@ -70,7 +70,7 @@ impl From<&IdentityRef> for Person {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Card {
     pub id: CardId,
     pub rev: u32,
