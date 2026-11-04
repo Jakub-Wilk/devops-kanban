@@ -108,6 +108,9 @@ of 401, so treat any non-JSON 203 as `Unauthorized`. Required PAT scope: `vso.wo
 - Board name ↔ backlog level: the board name equals the backlog `name` (`Stories`, `Features`, `Epics`).
 - `bugsBehavior`: `asRequirements` puts Bugs on the Stories board, `asTasks` (our org) puts them with Tasks,
   and `off` hides them.
+- `taskBacklog` is not a level with a board: its types (plus Bug when `asTasks`) are loaded with the
+  rest and shown under their parent (`System.Parent`) on the List, the kanban cards and the Timeline.
+  A new task gets its parent's `System.IterationPath`, as on ADO's own board.
 - The state categories (`Proposed`/`InProgress`/`Resolved`/`Completed`/`Removed`) are how we reason
   about states without hardcoding custom names.
 

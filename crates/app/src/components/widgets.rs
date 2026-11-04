@@ -60,11 +60,21 @@ pub fn Prio(priority: Option<u8>) -> Element {
 
 /// The person's ADO profile picture over their initials, which stay when there is no picture.
 #[component]
-pub fn Avatar(person: Person, #[props(default)] large: bool) -> Element {
+pub fn Avatar(
+    person: Person,
+    #[props(default)] large: bool,
+    #[props(default)] small: bool,
+) -> Element {
     // The descriptor whose image failed to load.
     let mut failed = use_signal(|| None::<String>);
     let initials = person.initials();
-    let class = if large { "av lg" } else { "av" };
+    let class = if large {
+        "av lg"
+    } else if small {
+        "av sm"
+    } else {
+        "av"
+    };
     let src = person
         .descriptor
         .clone()

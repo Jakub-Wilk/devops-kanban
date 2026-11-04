@@ -85,6 +85,7 @@ input::placeholder { color: var(--placeholder); }
 /* Same edge on photos and initials, so a flat initials circle reads as big as a photo. */
 .av::after { content: ''; position: absolute; inset: 0; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .14); pointer-events: none; }
 .av.lg { width: 36px; height: 36px; font-size: 12px; }
+.av.sm { width: 20px; height: 20px; font-size: 9px; }
 
 .pagehead { background: var(--surface); border-bottom: 1px solid var(--line); flex: none; }
 .pagehead .wrap { padding-top: 4px; display: flex; flex-direction: column; }
@@ -188,6 +189,13 @@ main.panel { padding-top: 24px; padding-bottom: 48px; display: flex; flex-direct
 .children { background: var(--surface); border-top: 1px solid var(--line); padding: 4px 20px 8px 52px; }
 .crow { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; min-height: 44px; padding: 2px 0 2px 14px; border-bottom: 1px dashed var(--card-line); }
 .crow.depth-2 { padding-left: 42px; }
+.crow.depth-3 { padding-left: 70px; }
+.crow.task { min-height: 38px; }
+.crow.task .etitle { min-height: 32px; font-size: 13px; color: var(--text-2); }
+.grip-space { width: 18px; flex: none; }
+.link.sm { min-height: 28px; padding: 0 6px; gap: 4px; font-size: 12px; }
+.crow .add-task { opacity: 0; transition: opacity .15s, background .15s; }
+.crow:hover .add-task, .crow .add-task:focus-visible { opacity: 1; }
 .crow .type { width: 80px; color: var(--muted); font-size: 12px; }
 .crow.dragging { opacity: .45; }
 .crow.drop-before { box-shadow: inset 0 2px 0 var(--accent), inset 4px 0 0 var(--tc, transparent); }
@@ -222,6 +230,15 @@ main.panel { padding-top: 24px; padding-bottom: 48px; display: flex; flex-direct
 .card .etitle { min-height: 0; padding: 2px 0; width: 100%; }
 .card .bottom { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 28px; }
 .card .tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.tasks { display: flex; flex-direction: column; gap: 2px; margin-top: 2px; padding-top: 6px; border-top: 1px dashed var(--card-line); }
+.task-row { display: flex; align-items: center; gap: 8px; min-height: 26px; padding: 0 2px 0 8px; border-radius: 6px; box-shadow: inset 2px 0 0 var(--tc, transparent); transition: background .15s, opacity .2s; }
+.task-row:hover { background: rgba(255, 255, 255, .04); }
+.task-row.pending { opacity: .55; }
+.task-row input { flex: none; width: 14px; height: 14px; margin: 0; accent-color: var(--accent); cursor: pointer; }
+.task-title { flex: 1 1 auto; min-width: 0; padding: 0; background: none; border: 0; text-align: left; font-size: 13px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-title:hover { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+.task-row.done .task-title { color: var(--faint); text-decoration: line-through; }
+.tasks .add-task { align-self: flex-start; margin-left: 2px; }
 .tag { font-size: 11px; color: var(--muted); border: 1px solid var(--line-strong); border-radius: 4px; padding: 0 5px; line-height: 17px; }
 .slot { height: 0; border-radius: 10px; border: 2px dashed rgba(124, 155, 255, .55); background: rgba(124, 155, 255, .06); animation: slotOpen .22s var(--ease) forwards; }
 .col-tail { flex: 1 1 auto; min-height: 36px; border-radius: 8px; }
@@ -281,6 +298,11 @@ main.panel { padding-top: 24px; padding-bottom: 48px; display: flex; flex-direct
 .tl-edge.left { left: 6px; }
 .tl-edge.right { right: 6px; }
 .ico.flip svg { transform: rotate(180deg); }
+.twirl.sm { flex: none; width: auto; min-width: 24px; height: 28px; gap: 2px; padding: 0 4px; }
+.twirl.sm .count { font-size: 11px; padding: 0 5px; }
+.twirl-space { flex: none; width: 24px; }
+.tl-row.child .tl-info { padding-left: 52px; }
+.tl-row.child .etitle { font-size: 13px; color: var(--text-2); }
 .tl-today { position: absolute; z-index: 1; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--accent); opacity: .75; }
 .tl-today-cap { position: absolute; z-index: 4; bottom: 0; width: 0; height: 0; margin-left: -6px; border-left: 6px solid transparent; border-right: 6px solid transparent; border-bottom: 8px solid var(--accent); }
 .tl-bar { position: absolute; top: 50%; z-index: 2; height: 10px; margin-top: -5px; border-radius: 5px; border: 1px solid var(--accent); background: rgba(124, 155, 255, .33); transform-origin: left; animation: growX .6s var(--ease) both; }

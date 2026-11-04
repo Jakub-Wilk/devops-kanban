@@ -199,11 +199,26 @@ fn hierarchy_and_progress() {
     let cfg: BacklogConfigurationDto = fixture("backlog_configuration.json");
     let states = StateMap::from_backlog(&cfg);
     let cards = cards();
-    let h = Hierarchy::build(&cards, &["Epic".into()]);
+    let h = Hierarchy::build(&cards, &["Epic".into()], &["Task".into()]);
     assert_eq!(h.roots, vec![118254]);
+    // Task 118301 hangs off story 118258 but isn't one of the epic's children.
     assert_eq!(h.children[&118254], vec![(118258, 1)]);
     assert_eq!(h.root_of.get(&118258), Some(&118254));
-    assert_eq!(h.progress(118254, &cards, &states), (1, 1)); // Done is Resolved
+    assert_eq!(h.progress(118254, &cards, &states), (1, 1)); // Done is Resolved; the task doesn't count
+    assert_eq!(h.tasks[&118258], vec![118301]);
+    assert_eq!(h.root_of.get(&118301), Some(&118254));
+}
+
+#[test]
+fn task_types_from_the_task_backlog() {
+    let mut cfg: BacklogConfigurationDto = fixture("backlog_configuration.json");
+    assert_eq!(
+        levels_of(&cfg).iter().filter(|l| l.name == "Tasks").count(),
+        0
+    );
+    assert_eq!(kanban_core::workspace::task_types_of(&cfg), ["Task"]);
+    cfg.bugs_behavior = Some("asTasks".into());
+    assert_eq!(kanban_core::workspace::task_types_of(&cfg), ["Task", "Bug"]);
 }
 
 #[test]

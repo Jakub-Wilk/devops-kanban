@@ -113,7 +113,8 @@ pub fn epic_rows<'a>(
 }
 
 /// Work items (not roots) for the timeline. With an epic state filter, items without an epic
-/// are left out.
+/// are left out. Tasks whose parent is loaded are left out too: they follow their parent (see
+/// [`Hierarchy::tasks`]) rather than being filtered themselves.
 pub fn timeline_items<'a>(
     ws: &'a Workspace,
     hierarchy: &Hierarchy,
@@ -125,6 +126,7 @@ pub fn timeline_items<'a>(
     ws.cards
         .values()
         .filter(|c| !roots.contains(&c.work_item_type))
+        .filter(|c| !ws.is_task(c) || c.parent.is_none_or(|p| !ws.cards.contains_key(&p)))
         .filter(|c| prefs.matches_item(c, iteration, me))
         .filter(|c| {
             prefs.epic_states.is_empty()

@@ -1,8 +1,9 @@
 //! Epic → Feature → Story tree for the epic list, built from `System.Parent`.
 //!
 //! Stories may hang directly off an epic or off one of its features; both appear as the epic's
-//! children (features first in order, each followed by its stories). Progress counts children
-//! whose state category is Resolved or Completed.
+//! children (features first in order, each followed by its stories). Tasks are not children:
+//! they are kept per parent in `tasks`, so epic rows, progress and filters ignore them. Progress
+//! counts children whose state category is Resolved or Completed.
 
 use std::collections::{HashMap, HashSet};
 
@@ -17,21 +18,33 @@ pub struct Hierarchy {
     pub roots: Vec<CardId>,
     /// Root → its descendants (depth-first, ordered), with depth (1 = direct child).
     pub children: HashMap<CardId, Vec<(CardId, u8)>>,
-    /// Any item → its root, if it has one.
+    /// Any item (tasks included) → its root, if it has one.
     pub root_of: HashMap<CardId, CardId>,
+    /// Parent → its tasks, in backlog order.
+    pub tasks: HashMap<CardId, Vec<CardId>>,
 }
 
 impl Hierarchy {
     /// `root_types` are the work item types at the top of the list (from the highest visible
-    /// portfolio backlog).
-    pub fn build(cards: &HashMap<CardId, Card>, root_types: &[String]) -> Self {
+    /// portfolio backlog); `task_types` those kept in [`Hierarchy::tasks`].
+    pub fn build(
+        cards: &HashMap<CardId, Card>,
+        root_types: &[String],
+        task_types: &[String],
+    ) -> Self {
         let mut kids: HashMap<CardId, Vec<&Card>> = HashMap::new();
+        let mut tasks: HashMap<CardId, Vec<&Card>> = HashMap::new();
         for card in cards.values() {
             if let Some(p) = card.parent {
-                kids.entry(p).or_default().push(card);
+                let map = if task_types.contains(&card.work_item_type) {
+                    &mut tasks
+                } else {
+                    &mut kids
+                };
+                map.entry(p).or_default().push(card);
             }
         }
-        for list in kids.values_mut() {
+        for list in kids.values_mut().chain(tasks.values_mut()) {
             list.sort_by(|a, b| order_cmp(a, b));
         }
 
@@ -63,6 +76,19 @@ impl Hierarchy {
                 }
             }
             out.children.insert(root.id, list);
+        }
+        for (parent, list) in tasks {
+            if let Some(&root) = out
+                .root_of
+                .get(&parent)
+                .or(out.roots.contains(&parent).then_some(&parent))
+            {
+                for t in &list {
+                    out.root_of.insert(t.id, root);
+                }
+            }
+            out.tasks
+                .insert(parent, list.iter().map(|c| c.id).collect());
         }
         out
     }

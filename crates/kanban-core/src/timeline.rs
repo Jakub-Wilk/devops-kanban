@@ -3,7 +3,7 @@
 //! Weeks start on Monday and are [`WEEK_PX`] wide; x = 0 is the Monday of today's week and the
 //! axis extends without limit both ways, so the view can pan anywhere. [`TimelineLayout::spans`]
 //! builds the month and week headers for just the visible window. Items are sorted earliest
-//! target first; undated items come last.
+//! target first, undated last; an item's children (tasks) follow it, sorted the same way.
 
 use serde::{Deserialize, Serialize};
 use time::{Date, Duration, Month};
@@ -20,6 +20,8 @@ pub struct TimelineItem {
     pub target: Option<Date>,
     /// Not Resolved/Completed.
     pub open: bool,
+    /// Shown under this item when it is in the list too.
+    pub parent: Option<CardId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -40,6 +42,10 @@ pub struct RowLayout {
     pub bar: Option<(f64, f64)>,
     pub overdue: bool,
     pub open: bool,
+    /// Set on child rows.
+    pub parent: Option<CardId>,
+    /// Number of child rows that follow (0 for children).
+    pub children: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -55,17 +61,30 @@ impl TimelineLayout {
         let origin = today - Duration::days(today.weekday().number_days_from_monday().into());
         let x = |d: Date| (d - origin).whole_days() as f64 * DAY_PX;
 
-        let mut sorted: Vec<&TimelineItem> = items.iter().collect();
-        sorted.sort_by(|a, b| match (a.target, b.target) {
+        let by_date = |a: &&TimelineItem, b: &&TimelineItem| match (a.target, b.target) {
             (Some(x), Some(y)) => x.cmp(&y).then(a.id.cmp(&b.id)),
             (Some(_), None) => std::cmp::Ordering::Less,
             (None, Some(_)) => std::cmp::Ordering::Greater,
             (None, None) => a.id.cmp(&b.id),
-        });
+        };
+        let listed = |id: CardId| items.iter().any(|i| i.id == id);
+        let is_child = |i: &TimelineItem| i.parent.is_some_and(listed);
+        let mut top: Vec<&TimelineItem> = items.iter().filter(|i| !is_child(i)).collect();
+        top.sort_by(by_date);
+        let mut sorted: Vec<(&TimelineItem, usize)> = Vec::with_capacity(items.len());
+        for parent in top {
+            let mut kids: Vec<&TimelineItem> = items
+                .iter()
+                .filter(|i| is_child(i) && i.parent == Some(parent.id))
+                .collect();
+            kids.sort_by(by_date);
+            sorted.push((parent, kids.len()));
+            sorted.extend(kids.into_iter().map(|k| (k, 0)));
+        }
         let today_x = x(today) + DAY_PX / 2.0;
         let rows = sorted
             .into_iter()
-            .map(|i| {
+            .map(|(i, children)| {
                 let marker_x = i.target.map(|d| x(d) + DAY_PX / 2.0);
                 let overdue = i.open && i.target.is_some_and(|d| d < today);
                 let bar = match marker_x {
@@ -80,6 +99,8 @@ impl TimelineLayout {
                     bar,
                     overdue,
                     open: i.open,
+                    parent: i.parent.filter(|&p| listed(p)),
+                    children,
                 }
             })
             .collect();
@@ -174,7 +195,46 @@ mod tests {
     use time::macros::date;
 
     fn item(id: CardId, target: Option<Date>, open: bool) -> TimelineItem {
-        TimelineItem { id, target, open }
+        TimelineItem {
+            id,
+            target,
+            open,
+            parent: None,
+        }
+    }
+
+    #[test]
+    fn children_follow_their_parent() {
+        let child = |id, target, parent| TimelineItem {
+            parent: Some(parent),
+            ..item(id, target, true)
+        };
+        let l = TimelineLayout::build(
+            date!(2026 - 11 - 04),
+            &[
+                item(1, Some(date!(2026 - 12 - 01)), true),
+                item(2, Some(date!(2026 - 11 - 10)), true),
+                child(11, None, 1),
+                child(12, Some(date!(2026 - 11 - 20)), 1),
+                // Parent not on the timeline: shown as a top-level row.
+                child(30, Some(date!(2026 - 11 - 15)), 99),
+            ],
+        );
+        let order: Vec<(CardId, Option<CardId>, usize)> = l
+            .rows
+            .iter()
+            .map(|r| (r.id, r.parent, r.children))
+            .collect();
+        assert_eq!(
+            order,
+            [
+                (2, None, 0),
+                (30, None, 0),
+                (1, None, 2),
+                (12, Some(1), 0),
+                (11, Some(1), 0)
+            ]
+        );
     }
 
     #[test]

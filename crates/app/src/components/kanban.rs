@@ -1,6 +1,7 @@
 //! "Kanban" tab: the team's real board for one backlog level (columns, WIP limits, swimlanes
 //! and state mappings from ADO), with a Features/Stories switcher, a Columns menu to hide
-//! columns, epic, assignee and area filters (all saved per board), and drag-and-drop between and within
+//! columns, epic, assignee and area filters (all saved per board), each card's tasks as a
+//! checklist, and drag-and-drop between and within
 //! columns.
 
 use std::collections::HashSet;
@@ -15,6 +16,7 @@ use crate::components::filters::{
 };
 use crate::components::icons;
 use crate::components::item_dialog::{open_edit, open_new};
+use crate::components::tasks::{CardTasks, TaskItem, task_items};
 use crate::components::widgets::{Assignee, DateLabel, Icon, Prio, StatePill};
 use crate::routes::Route;
 use crate::services;
@@ -276,6 +278,7 @@ pub fn Kanban(board: String) -> Element {
                         visible: visible.clone(),
                         roots: hierarchy.root_of.clone(),
                         root_titles: roots.clone(),
+                        task_ids: hierarchy.tasks.clone(),
                         grid_style: grid_style.clone(),
                         collapsed: collapsed_lanes,
                     }
@@ -336,6 +339,8 @@ fn Lane(
     visible: HashSet<CardId>,
     roots: std::collections::HashMap<CardId, CardId>,
     root_titles: std::collections::HashMap<CardId, String>,
+    /// Parent → task ids ([`kanban_core::Hierarchy::tasks`]).
+    task_ids: std::collections::HashMap<CardId, Vec<CardId>>,
     grid_style: String,
     collapsed: Signal<HashSet<String>>,
 ) -> Element {
@@ -367,6 +372,18 @@ fn Lane(
             cards
                 .iter()
                 .map(|c| (c.id, (ws.category(c), ws.state_color(c))))
+        })
+        .collect();
+    // Each card's tasks, and the task type when it can own tasks (for "Add task").
+    let tasks: std::collections::HashMap<CardId, (Vec<TaskItem>, Option<String>)> = cells
+        .iter()
+        .flat_map(|(_, cards, _)| cards.iter())
+        .map(|c| {
+            let add = ws
+                .owns_tasks(c)
+                .then(|| ws.task_type().map(str::to_owned))
+                .flatten();
+            (c.id, (task_items(ws, task_ids.get(&c.id)), add))
         })
         .collect();
     drop(ws_guard);
@@ -403,6 +420,7 @@ fn Lane(
                         roots: roots.clone(),
                         root_titles: root_titles.clone(),
                         categories: categories.clone(),
+                        tasks: tasks.clone(),
                     }
                 }
             }
@@ -421,6 +439,7 @@ fn ColumnCell(
     roots: std::collections::HashMap<CardId, CardId>,
     root_titles: std::collections::HashMap<CardId, String>,
     categories: std::collections::HashMap<CardId, (kanban_core::StateCategory, String)>,
+    tasks: std::collections::HashMap<CardId, (Vec<TaskItem>, Option<String>)>,
 ) -> Element {
     let mut st = use_app();
     let slot = st.drop_slot.read().clone();
@@ -478,6 +497,7 @@ fn ColumnCell(
                     state: categories.get(&card.id).cloned().unwrap_or((kanban_core::StateCategory::Unknown, kanban_core::StateCategory::Unknown.default_color().to_owned())),
                     column_id: column.id.clone(),
                     lane_id: lane_id.clone(),
+                    tasks: tasks.get(&card.id).cloned().unwrap_or_default(),
                     card,
                 }
                 }
@@ -535,6 +555,8 @@ fn CardView(
     state: (kanban_core::StateCategory, String),
     column_id: String,
     lane_id: Option<String>,
+    /// The card's tasks, and the task type when it can own tasks.
+    tasks: (Vec<TaskItem>, Option<String>),
 ) -> Element {
     let mut st = use_app();
     let id = card.id;
@@ -547,6 +569,8 @@ fn CardView(
     );
     let (category, color) = state;
     let edit = card.clone();
+    let parent = card.clone();
+    let (task_list, add_task) = tasks;
     let tags: Vec<String> = card.tags.iter().take(3).cloned().collect();
     rsx! {
         article {
@@ -596,6 +620,9 @@ fn CardView(
             div { class: "bottom",
                 Assignee { id, person: card.assigned_to.clone(), title: card.title.clone() }
                 DateLabel { date: card.target_date, open: !category.is_done() }
+            }
+            if !task_list.is_empty() || add_task.is_some() {
+                CardTasks { parent: parent.clone(), tasks: task_list.clone(), task_type: add_task.clone() }
             }
         }
     }

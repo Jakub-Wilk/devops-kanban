@@ -1,4 +1,5 @@
-//! "List" tab: epics in backlog order, each expandable to its features and stories.
+//! "List" tab: epics in backlog order, each expandable to its features and stories, with each
+//! story's tasks one level deeper.
 //! Rows can be dragged to reorder (siblings only), which goes through `workitemsorder`. Each row
 //! has a stripe in its work item type's ADO color.
 
@@ -10,6 +11,7 @@ use kanban_core::{Card, CardId, Workspace};
 use crate::components::filters::{ItemFilters, ItemTab, view_prefs};
 use crate::components::icons;
 use crate::components::item_dialog::{open_edit, open_new};
+use crate::components::tasks::{AddTask, TaskItem, TaskRow, task_items};
 use crate::components::widgets::{Assignee, DateLabel, Icon, Prio, StatePill};
 use crate::services;
 use crate::state::{Drag, use_app};
@@ -96,6 +98,19 @@ pub fn EpicList(search_focus: Signal<Option<std::rc::Rc<MountedData>>>) -> Eleme
         .collect();
     let root_type = root_types.first().cloned().unwrap_or_else(|| "Epic".into());
     let default_area = default_area(ws);
+    // Tasks per child row, and which rows may get one (`+ Task`).
+    let task_type = ws.task_type().map(str::to_owned);
+    let kid_tasks: std::collections::HashMap<CardId, Vec<TaskItem>> = rows
+        .iter()
+        .flat_map(|(_, kids)| kids.iter())
+        .map(|(c, _)| (c.id, task_items(ws, hierarchy.tasks.get(&c.id))))
+        .collect();
+    let owners: HashSet<CardId> = rows
+        .iter()
+        .flat_map(|(_, kids)| kids.iter())
+        .filter(|(c, _)| ws.owns_tasks(c))
+        .map(|(c, _)| c.id)
+        .collect();
     let pending = st.pending.read().clone();
     let dragging = *st.drag.read();
     drop(ws_guard);
@@ -266,15 +281,20 @@ pub fn EpicList(search_focus: Signal<Option<std::rc::Rc<MountedData>>>) -> Eleme
                                 div { class: "inner",
                                     div { class: "children",
                                         for ((child, depth), (ccat, ccolor, ctype)) in kids.into_iter().zip(kid_cats) {
-                                            ChildRow {
-                                                key: "{child.id}",
-                                                card: child,
-                                                depth,
-                                                category: ccat,
-                                                color: ccolor,
-                                                type_color: ctype,
-                                                root: id,
-                                                siblings: kid_ids.clone(),
+                                            Fragment { key: "{child.id}",
+                                                ChildRow {
+                                                    add_task: task_type.clone().filter(|_| owners.contains(&child.id)),
+                                                    card: child.clone(),
+                                                    depth,
+                                                    category: ccat,
+                                                    color: ccolor,
+                                                    type_color: ctype,
+                                                    root: id,
+                                                    siblings: kid_ids.clone(),
+                                                }
+                                                for t in kid_tasks.get(&child.id).cloned().unwrap_or_default() {
+                                                    TaskRow { key: "{t.card.id}", task: t, depth: depth + 1 }
+                                                }
                                             }
                                         }
                                         div { class: "addrow",
@@ -317,6 +337,8 @@ fn ChildRow(
     type_color: String,
     root: CardId,
     siblings: Vec<CardId>,
+    /// Task type, when this row can own tasks.
+    add_task: Option<String>,
 ) -> Element {
     let mut st = use_app();
     let mut over = use_signal(|| false);
@@ -390,6 +412,9 @@ fn ChildRow(
                     onclick: move |_| open_edit(st, &edit_card, false),
                     "{card.title}"
                 }
+            }
+            if let Some(t) = add_task {
+                AddTask { parent: id, area: card.area_path.clone(), task_type: t }
             }
             span { style: "width: 104px", DateLabel { date: card.target_date, open: !category.is_done() } }
             StatePill { state: card.state.clone(), category, color }

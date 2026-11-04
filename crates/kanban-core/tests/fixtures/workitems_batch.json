@@ -1,5 +1,5 @@
 {
-  "count": 4,
+  "count": 5,
   "value": [
     {
       "id": 111354, "rev": 11,
@@ -48,6 +48,16 @@
         "Microsoft.VSTS.Common.Priority": 2, "Microsoft.VSTS.Scheduling.TargetDate": "2026-11-20T00:00:00Z"
       },
       "url": "https://dev.azure.com/media-press/_apis/wit/workItems/118429"
+    },
+    {
+      "id": 118301, "rev": 2,
+      "fields": {
+        "System.Id": 118301, "System.AreaPath": "IT Finance\\Penny", "System.Rev": 2, "System.IterationPath": "IT Finance",
+        "System.WorkItemType": "Task", "System.State": "Active",
+        "System.Parent": 118258, "System.Title": "Testy filtra saldo",
+        "Microsoft.VSTS.Common.Priority": 2, "Microsoft.VSTS.Common.StackRank": 1999979600.0
+      },
+      "url": "https://dev.azure.com/media-press/_apis/wit/workItems/118301"
     }
   ]
 }

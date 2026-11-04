@@ -1,6 +1,6 @@
 //! Everything one project/team screen needs, loaded in one go: backlog levels, state categories
-//! and colors, type colors, each level's board, the cards of every level, iterations and the
-//! signed-in user.
+//! and colors, type colors, each level's board, the cards of every level and their tasks,
+//! iterations and the signed-in user.
 //!
 //! A board that ADO can't serve (some teams always get HTTP 500) is recorded in `board_errors`;
 //! the rest of the workspace still loads.
@@ -42,6 +42,10 @@ pub struct Workspace {
     pub team: String,
     /// Visible levels, highest rank (Epics) first.
     pub levels: Vec<BacklogLevel>,
+    /// Types of the task backlog (default first), plus Bug when bugs behave as tasks. Not a
+    /// level: tasks have no board and are shown under their parent.
+    #[serde(default)]
+    pub task_types: Vec<String>,
     pub states: StateMap,
     pub scope: Scope,
     pub fields: Vec<String>,
@@ -77,6 +81,7 @@ impl Workspace {
         })?;
         let team_values = team_values?;
         let levels = levels_of(&backlog);
+        let task_types = task_types_of(&backlog);
         let mut states = StateMap::from_backlog(&backlog);
 
         // Board config per level, concurrently. Failures are per board.
@@ -123,6 +128,7 @@ impl Workspace {
                     .values()
                     .flat_map(|b| b.work_item_types.iter().cloned()),
             )
+            .chain(task_types.iter().cloned())
             .collect();
         work_item_types.sort();
         work_item_types.dedup();
@@ -169,6 +175,7 @@ impl Workspace {
             project: project.to_owned(),
             team: team.to_owned(),
             levels,
+            task_types,
             states,
             areas: team_values.values.iter().map(|v| v.value.clone()).collect(),
             scope,
@@ -262,7 +269,26 @@ impl Workspace {
     }
 
     pub fn hierarchy(&self) -> Hierarchy {
-        Hierarchy::build(&self.cards, &self.root_types())
+        Hierarchy::build(&self.cards, &self.root_types(), &self.task_types)
+    }
+
+    pub fn is_task(&self, card: &Card) -> bool {
+        self.task_types.contains(&card.work_item_type)
+    }
+
+    /// The type new tasks are created as.
+    pub fn task_type(&self) -> Option<&str> {
+        self.task_types.first().map(String::as_str)
+    }
+
+    /// Can the card have tasks? Requirement-level items (stories, and bugs on that level).
+    pub fn owns_tasks(&self, card: &Card) -> bool {
+        !self.task_types.is_empty()
+            && self
+                .levels
+                .iter()
+                .find(|l| !l.is_portfolio)
+                .is_some_and(|l| l.work_item_types.contains(&card.work_item_type))
     }
 
     pub fn category(&self, card: &Card) -> StateCategory {
@@ -296,6 +322,23 @@ pub fn type_colors(types: &[ado_client::WorkItemTypeDto]) -> HashMap<String, Str
         .iter()
         .filter_map(|t| Some((t.name.clone(), t.color.clone()?.to_ascii_lowercase())))
         .collect()
+}
+
+/// The task backlog's types (default first), plus Bug when `bugsBehavior` is `asTasks`.
+pub fn task_types_of(cfg: &BacklogConfigurationDto) -> Vec<String> {
+    let level = &cfg.task_backlog;
+    let mut out: Vec<String> = level
+        .default_work_item_type
+        .iter()
+        .map(|t| t.name.clone())
+        .chain(level.work_item_types.iter().map(|t| t.name.clone()))
+        .collect();
+    if cfg.bugs_behavior.as_deref() == Some("asTasks") {
+        out.push("Bug".into());
+    }
+    let mut seen = std::collections::HashSet::new();
+    out.retain(|t| seen.insert(t.clone()));
+    out
 }
 
 /// Visible portfolio levels (highest rank first) followed by the requirement level.

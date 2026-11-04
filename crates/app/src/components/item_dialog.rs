@@ -87,13 +87,25 @@ pub fn ItemDialog() -> Element {
                 .or_else(|| l.work_item_types.first().cloned())
         })
         .collect();
-    let roots = services::root_titles(ws);
-    let mut parents: Vec<(CardId, String)> = ws
-        .hierarchy()
-        .roots
-        .iter()
-        .filter_map(|id| roots.get(id).map(|t| (*id, t.clone())))
-        .collect();
+    // A task's parent is a story (or another task owner); everything else hangs off an epic.
+    let is_task = ws.task_types.contains(&form.work_item_type);
+    let mut parents: Vec<(CardId, String)> = if is_task {
+        let mut owners: Vec<(CardId, String)> = ws
+            .cards
+            .values()
+            .filter(|c| ws.owns_tasks(c))
+            .map(|c| (c.id, c.title.clone()))
+            .collect();
+        owners.sort_by_key(|(id, _)| std::cmp::Reverse(*id));
+        owners
+    } else {
+        let roots = services::root_titles(ws);
+        ws.hierarchy()
+            .roots
+            .iter()
+            .filter_map(|id| roots.get(id).map(|t| (*id, t.clone())))
+            .collect()
+    };
     if let Some(p) = form.parent
         && !parents.iter().any(|(id, _)| *id == p)
     {
@@ -126,6 +138,8 @@ pub fn ItemDialog() -> Element {
             .first()
             .cloned()
             .unwrap_or_else(|| "Epic".into())
+    } else if is_task {
+        form.work_item_type.clone()
     } else {
         "work item".into()
     };
@@ -137,6 +151,8 @@ pub fn ItemDialog() -> Element {
 
     let title = match (editing.is_some(), is_root) {
         (true, true) => format!("Edit {}", kind.to_lowercase()),
+        (true, false) if is_task => format!("Edit {}", kind.to_lowercase()),
+        (false, false) if is_task => format!("New {}", kind.to_lowercase()),
         (true, false) => "Edit work item".to_owned(),
         (false, true) => format!("New {}", kind.to_lowercase()),
         (false, false) => "New work item".to_owned(),
@@ -217,7 +233,7 @@ pub fn ItemDialog() -> Element {
                             oninput: move |e| set(&|f| f.title = e.value()),
                         }
                     }
-                    if !is_root && editing.is_none() && types.len() > 1 {
+                    if !is_root && !is_task && editing.is_none() && types.len() > 1 {
                         fieldset {
                             legend { "Type" }
                             div { class: "chips",
@@ -239,7 +255,7 @@ pub fn ItemDialog() -> Element {
                     }
                     if !is_root {
                         label { class: "f",
-                            span { class: "lbl", "Parent epic" }
+                            span { class: "lbl", if is_task { "Parent" } else { "Parent epic" } }
                             span { class: "select-wrap",
                                 select {
                                     class: "field",
@@ -252,7 +268,7 @@ pub fn ItemDialog() -> Element {
                                             if let Some(a) = &area { f.area = a.clone(); }
                                         });
                                     },
-                                    option { value: "", selected: form.parent.is_none(), "Select an epic" }
+                                    option { value: "", selected: form.parent.is_none(), if is_task { "Select a parent" } else { "Select an epic" } }
                                     for (id, t) in parents {
                                         option { key: "{id}", value: "{id}", selected: form.parent == Some(id), "{id}  {t}" }
                                     }
@@ -273,7 +289,7 @@ pub fn ItemDialog() -> Element {
                             }
                             span { class: "chev", Icon { svg: icons::CHEVRON_DOWN } }
                         }
-                        if !is_root { span { class: "hint", "Follows the parent epic's area. Change it if this item belongs elsewhere." } }
+                        if !is_root { span { class: "hint", if is_task { "Follows the parent's area. Change it if this task belongs elsewhere." } else { "Follows the parent epic's area. Change it if this item belongs elsewhere." } } }
                     }
                     fieldset {
                         legend { "Priority" }

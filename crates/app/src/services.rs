@@ -10,7 +10,8 @@ use ado_client::{AdoClient, AdoError, ClientConfig, PatAuth, PatchDocument, Work
 use dioxus::prelude::*;
 use kanban_core::card::{Card, CardId, Person, fields};
 use kanban_core::{
-    CoreError, MovePlan, MoveTarget, Settings, SyncEngine, SyncEvent, Workspace, cache,
+    CoreError, MovePlan, MoveTarget, Settings, StateCategory, SyncEngine, SyncEvent, Workspace,
+    cache,
 };
 use serde_json::Value;
 use time::OffsetDateTime;
@@ -441,6 +442,34 @@ pub fn set_target_date(st: AppState, id: CardId, date: Option<time::Date>) {
     );
 }
 
+pub fn set_state(st: AppState, id: CardId, state: String) {
+    let value = Value::String(state.clone());
+    patch_item(st, id, vec![(fields::STATE.into(), value)], move |c| {
+        c.state = state;
+    });
+}
+
+/// Ticks (first Completed state, e.g. Closed) or unticks (first Proposed state, e.g. New) a task.
+pub fn set_task_done(st: AppState, id: CardId, done: bool) {
+    let state = st.workspace.peek().as_ref().and_then(|w| {
+        let t = w.cards.get(&id)?.work_item_type.clone();
+        let category = if done {
+            StateCategory::Completed
+        } else {
+            StateCategory::Proposed
+        };
+        w.states.states_in(&[t], category).into_iter().next()
+    });
+    match state {
+        Some(s) => set_state(st, id, s),
+        None => toast(
+            st,
+            ToastKind::Warn,
+            "This work item type has no state for that.",
+        ),
+    }
+}
+
 /// Moves a list row between `prev` and `next` in backlog order.
 pub fn reorder_item(mut st: AppState, id: CardId, prev: Option<CardId>, next: Option<CardId>) {
     let Some(client) = st.client.peek().clone() else {
@@ -594,6 +623,16 @@ pub async fn save_item(
             });
         if let Some(p) = parent {
             doc = doc.parent(&client.work_item_url(p));
+            // Tasks land in their parent's sprint, as on ADO's own board.
+            let iteration = st.workspace.peek().as_ref().and_then(|w| {
+                w.task_types
+                    .contains(&work_item_type)
+                    .then(|| w.cards.get(&p).map(|c| c.iteration_path.clone()))
+                    .flatten()
+            });
+            if let Some(it) = iteration.filter(|i| !i.is_empty()) {
+                doc = doc.field(fields::ITERATION_PATH, Value::String(it));
+            }
         }
         return match client
             .create_work_item(&project, &work_item_type, &doc)

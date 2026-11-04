@@ -1,8 +1,10 @@
 //! "Timeline" tab: work items (earliest target first, undated last, with its own filters) on the
-//! left, an endless week calendar on the right. Drag the separator to resize the two, drag the
+//! left, each with its tasks below it (collapsed until expanded), and an endless week calendar
+//! on the right. Drag the separator to resize the two, drag the
 //! calendar background to pan (the wheel only scrolls rows), drag a diamond to change the item's
 //! target date. "Today" brings today back into view.
 
+use std::collections::HashSet;
 use std::time::Duration;
 
 use dioxus::prelude::*;
@@ -58,6 +60,8 @@ pub fn Timeline() -> Element {
     });
     // Axis x at the calendar's left edge; `None` = today at a third of the width.
     let mut scroll_x = use_signal(|| None::<f64>);
+    // Parents whose tasks are shown.
+    let mut expanded = use_signal(HashSet::<CardId>::new);
 
     let ws_guard = st.workspace.read();
     let Some(ws) = ws_guard.as_ref() else {
@@ -66,15 +70,23 @@ pub fn Timeline() -> Element {
     let hierarchy = ws.hierarchy();
     let titles = services::root_titles(ws);
     let view = view_prefs(st, ws);
-    let items: Vec<(Card, StateCategory, String)> = kanban_core::filters::timeline_items(
+    // Filtered items, then the tasks of each (tasks follow their parent, unfiltered).
+    let shown = kanban_core::filters::timeline_items(
         ws,
         &hierarchy,
         &view.timeline,
         view.iteration.as_deref(),
-    )
-    .into_iter()
-    .map(|c| (c.clone(), ws.category(c), ws.state_color(c)))
-    .collect();
+    );
+    let tasks: Vec<&Card> = shown
+        .iter()
+        .flat_map(|c| hierarchy.tasks.get(&c.id).into_iter().flatten())
+        .filter_map(|id| ws.cards.get(id))
+        .collect();
+    let items: Vec<(Card, StateCategory, String)> = shown
+        .into_iter()
+        .chain(tasks)
+        .map(|c| (c.clone(), ws.category(c), ws.state_color(c)))
+        .collect();
     let new_type = ws
         .kanban_levels()
         .last()
@@ -92,6 +104,7 @@ pub fn Timeline() -> Element {
                 id: c.id,
                 target: c.target_date,
                 open: !cat.is_done(),
+                parent: c.parent,
             })
             .collect::<Vec<_>>(),
     );
@@ -265,8 +278,13 @@ pub fn Timeline() -> Element {
                 }
                 for (i, row) in layout.rows.iter().enumerate() {
                     {
+                        if row.parent.is_some_and(|p| !expanded.read().contains(&p)) {
+                            return rsx! {};
+                        }
                         let Some((card, cat, color)) = by_id.get(&row.id).cloned() else { return rsx! {} };
                         let id = card.id;
+                        let is_open = expanded.read().contains(&id);
+                        let n_tasks = row.children;
                         let epic = hierarchy.root_of.get(&id).and_then(|r| titles.get(r).map(|t| format!("{r} {t}")));
                         let dx = match current {
                             Some(PointerMode::Marker { id: m, dx, .. }) if m == id => Some(dx),
@@ -296,8 +314,25 @@ pub fn Timeline() -> Element {
                             .map(|(l, w)| (l - sx, w))
                             .filter(|(l, w)| l + w > 0.0 && *l < track_w);
                         rsx! {
-                            div { key: "{id}", class: "tl-row", style: "--i: {i}",
+                            div { key: "{id}", class: if row.parent.is_some() { "tl-row child" } else { "tl-row" }, style: "--i: {i}",
                                 div { class: "tl-info",
+                                    if n_tasks > 0 {
+                                        button {
+                                            class: if is_open { "twirl sm open" } else { "twirl sm" },
+                                            r#type: "button",
+                                            aria_expanded: "{is_open}",
+                                            aria_label: if is_open { "Hide the tasks of {card.title}" } else { "Show the tasks of {card.title}" },
+                                            "data-tip": if n_tasks == 1 { "1 task".to_owned() } else { format!("{n_tasks} tasks") },
+                                            onclick: move |_| {
+                                                let mut e = expanded.write();
+                                                if !e.remove(&id) { e.insert(id); }
+                                            },
+                                            Icon { svg: icons::CHEVRON_RIGHT }
+                                            span { class: "count", "{n_tasks}" }
+                                        }
+                                    } else {
+                                        span { class: "twirl-space" }
+                                    }
                                     span { class: "id", style: "width: 56px", "{id}" }
                                     Prio { priority: card.priority }
                                     div { style: "flex: 1 1 0; min-width: 0; display: flex; flex-direction: column",

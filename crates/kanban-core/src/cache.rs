@@ -8,7 +8,7 @@ use crate::error::CoreError;
 use crate::workspace::Workspace;
 
 /// Bumped when the snapshot shape changes; older files are ignored.
-const VERSION: u32 = 4;
+const VERSION: u32 = 5;
 
 #[derive(serde::Serialize, serde::Deserialize)]
 struct Snapshot {
