@@ -180,6 +180,7 @@ main.panel { padding-top: 24px; padding-bottom: 48px; display: flex; flex-direct
 .expand.open { grid-template-rows: 1fr; }
 .expand > .inner { overflow: hidden; min-height: 0; visibility: hidden; transition: visibility 0s .35s; }
 .expand.open > .inner { visibility: visible; transition: visibility 0s; }
+.list.instant .expand, .list.instant .expand > .inner { transition: none; }
 .children { background: var(--surface); border-top: 1px solid var(--line); padding: 4px 20px 8px 52px; }
 .crow { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; min-height: 44px; padding: 2px 0 2px 14px; border-bottom: 1px dashed var(--card-line); }
 .crow.depth-2 { padding-left: 42px; }

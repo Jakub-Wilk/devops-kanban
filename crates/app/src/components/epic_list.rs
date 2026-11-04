@@ -19,6 +19,9 @@ pub fn EpicList(search_focus: Signal<Option<std::rc::Rc<MountedData>>>) -> Eleme
     let mut st = use_app();
     let mut query = use_signal(String::new);
     let mut open = use_signal(HashSet::<CardId>::new);
+    // Expand-all / collapse-all skip the animation: WebKit drops repaints when every row
+    // animates its height at once, leaving blank rows until hovered.
+    let mut instant = use_signal(|| false);
     let mut over = use_signal(|| None::<CardId>);
 
     let ws_guard = st.workspace.read();
@@ -136,7 +139,10 @@ pub fn EpicList(search_focus: Signal<Option<std::rc::Rc<MountedData>>>) -> Eleme
                     disabled: all_open,
                     onclick: {
                         let ids = visible_roots.clone();
-                        move |_| open.set(ids.iter().copied().collect())
+                        move |_| {
+                            instant.set(true);
+                            open.set(ids.iter().copied().collect());
+                        }
                     },
                     Icon { svg: icons::PLUS }
                 }
@@ -146,7 +152,10 @@ pub fn EpicList(search_focus: Signal<Option<std::rc::Rc<MountedData>>>) -> Eleme
                     title: "Collapse all",
                     aria_label: "Collapse all",
                     disabled: none_open,
-                    onclick: move |_| open.write().clear(),
+                    onclick: move |_| {
+                        instant.set(true);
+                        open.write().clear();
+                    },
                     Icon { svg: icons::MINUS }
                 }
             }
@@ -165,7 +174,7 @@ pub fn EpicList(search_focus: Signal<Option<std::rc::Rc<MountedData>>>) -> Eleme
             }
         }
 
-        section { class: "list", aria_label: "Epics",
+        section { class: if instant() { "list instant" } else { "list" }, aria_label: "Epics",
             for (i, ((epic, kids), ((done, total), ((cat, color, type_color), kid_cats)))) in rows.into_iter().zip(progress.into_iter().zip(categories)).enumerate() {
                 {
                     let id = epic.id;
@@ -220,6 +229,7 @@ pub fn EpicList(search_focus: Signal<Option<std::rc::Rc<MountedData>>>) -> Eleme
                                     aria_expanded: "{expanded}",
                                     aria_label: if expanded { "Collapse {epic.title}" } else { "Expand {epic.title}" },
                                     onclick: move |_| {
+                                        instant.set(false);
                                         let mut o = open.write();
                                         if !o.remove(&id) { o.insert(id); }
                                     },
