@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/ado-client", "crates/kanban-core", "crates/app"]
+members = ["crates/ado-client", "crates/sevenpace-client", "crates/kanban-core", "crates/app"]
 
 [workspace.package]
 version = "0.1.0"
@@ -11,6 +11,7 @@ publish = false
 
 [workspace.dependencies]
 ado-client = { path = "crates/ado-client" }
+sevenpace-client = { path = "crates/sevenpace-client" }
 kanban-core = { path = "crates/kanban-core" }
 
 dioxus = { version = "0.7", features = ["router"] }

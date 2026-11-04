@@ -22,17 +22,21 @@
 ┌──────────────────────────── crates/kanban-core ─────────────────────▼─────────────────┐
 │ board.rs  Board/Column/Lane/BoardFields   card.rs  Card                               │
 │ move_plan.rs  drop → field patches + reorder   sync.rs  SyncEngine (delta polling)    │
-│ cache.rs  last board snapshot on disk          config.rs  Settings + keyring          │
-└──────────────────────────────────────────┬────────────────────────────────────────────┘
-                                           │ DTOs
-┌──────────────────────────── crates/ado-client ──────────────────────▼─────────────────┐
-│ client.rs AdoClient (reqwest, URL/api-version, auth header)   auth.rs AuthProvider/Pat │
-│ api/*  boards · backlog · teams · iterations · wiql · workitems · comments · order    │
-│ models/* serde DTOs        error.rs AdoError        rate_limit.rs Retry-After/X-RateLimit│
-└───────────────────────────────────────────────────────────────────────────────────────┘
+│ time.rs   TimeEntry, 7pace read/write paths    cache.rs  last board snapshot on disk  │
+│ config.rs Settings + keyring                                                          │
+└───────────────────┬───────────────────────────────────────────────┬───────────────────┘
+                    │ DTOs                                          │ DTOs
+┌───────────────── crates/ado-client ──────▼──────────┐ ┌──── crates/sevenpace-client ──▼───┐
+│ client.rs AdoClient (reqwest, api-version, auth)    │ │ client.rs SevenPaceClient          │
+│ auth.rs   AuthProvider trait, PatAuth  ◄────────────┼─┤ auth.rs   SevenPaceToken (Bearer)  │
+│ api/*  boards · backlog · teams · iterations · wiql │ │ api/*  worklogs · tracking ·       │
+│        workitems · comments · order                 │ │        activity_types · me         │
+│ models/* DTOs  error.rs  rate_limit.rs              │ │ models.rs  error.rs                │
+└─────────────────────────────────────────────────────┘ └────────────────────────────────────┘
+        dev.azure.com (ADO PAT)                            {org}.timehub.7pace.com (7pace token)
 ```
 
-Dependencies only point downward. `ado-client` and `kanban-core` have no Dioxus or desktop
+Dependencies only point downward. The client crates and `kanban-core` have no Dioxus or desktop
 dependencies, so they can be unit-tested headless and reused by a future web/fullstack target.
 
 ## Loading a board
@@ -104,6 +108,25 @@ path handles this. The `Api` error message is shown verbatim.
 
 The engine pauses when the window is hidden or minimised, and backs off on rate limiting. Webhooks
 and service hooks are not possible for a desktop client.
+
+## Time tracking (7pace)
+
+7pace is a separate service with its own token. See [7pace-api.md](7pace-api.md). There are two paths:
+
+```
+Card totals (always, no 7pace call)
+  workitemsbatch fields += Microsoft.VSTS.Scheduling.CompletedWork   ← 7pace keeps it in sync
+
+Entries / logging / timer (time_tracking.enabled + 7pace token)
+  open card    → GET  /api/rest/workLogs?$workItemIds={id}            → TimeEntry[]
+  log time     → POST /api/rest/workLogs {workItemId, timeStamp(local), length(s), activityTypeId}
+  start/stop   → POST /api/tracking/client/startTracking | stopTracking/0
+  after write  → refetch the card from ADO for the new CompletedWork total
+```
+
+A missing or expired 7pace token disables only these features; the board keeps working.
+`GET /api/tracking/client/current` is read when the app gains focus, because the timer can be started or
+stopped from the 7pace UI too.
 
 ## Errors and resilience
 

@@ -12,20 +12,23 @@ design is intentionally undecided. Do not invent visual design without being ask
 crates/app          Dioxus 0.7 desktop binary `devops-kanban` (routes, views, reactive state)
    │
    ▼
-crates/kanban-core  Domain: Board/Column/Card model, MovePlan, SyncEngine, cache, Settings
+crates/kanban-core  Domain: Board/Column/Card model, MovePlan, SyncEngine, time, cache, Settings
    │
-   ▼
-crates/ado-client   Thin reqwest+serde client for ADO REST (work/boards, wit). No UI.
+   ├──────────────────────────┐
+   ▼                          ▼
+crates/ado-client        crates/sevenpace-client
+  ADO REST (work, wit)     7pace Timetracker REST (worklogs, timer)
 ```
 
-- Dependencies point **downward only**. `ado-client` and `kanban-core` must never depend on
-  `dioxus` or on desktop-only APIs. That keeps them unit-testable and a future web target possible.
-- `ado-client` models mirror the wire JSON. `kanban-core` owns the domain types. Convert at the
+- Dependencies point **downward only**. `ado-client`, `sevenpace-client` and `kanban-core` must
+  never depend on `dioxus` or on desktop-only APIs. `sevenpace-client` uses `ado-client` only for
+  the `AuthProvider` trait. That keeps them unit-testable and a future web target possible.
+- Client crate models mirror the wire JSON. `kanban-core` owns the domain types. Convert at the
   boundary; do not leak DTOs into the UI.
 - Do **not** use the `azure_devops_rust_api` crate (archived 2026-10-26).
 
-Details: [docs/architecture.md](docs/architecture.md) · API: [docs/azure-devops-api.md](docs/azure-devops-api.md)
-· Settings: [docs/settings.md](docs/settings.md)
+Details: [docs/architecture.md](docs/architecture.md) · APIs: [docs/azure-devops-api.md](docs/azure-devops-api.md),
+[docs/7pace-api.md](docs/7pace-api.md) · Settings: [docs/settings.md](docs/settings.md)
 
 ## Commands
 
@@ -69,12 +72,29 @@ These are easy to get wrong:
 8. **Respect rate limits.** Honour `Retry-After` and `X-RateLimit-*`, and back off on 429. Polling must stay
    cheap: a delta WIQL on `System.ChangedDate`, never a full reload.
 
+## 7pace rules
+
+Time tracking goes through 7pace Timetracker, a **separate service**. See [docs/7pace-api.md](docs/7pace-api.md).
+
+1. **Separate host and token.** The host is `https://{org}.timehub.7pace.com`, with `api-version=3.2` on every REST call.
+   The ADO PAT is **not** accepted there; never send it to 7pace, and never send the 7pace token to ADO.
+2. **Units:** `length` and `billableLength` are **seconds**. `timeStamp` is the work's **start** in the
+   **user's local time**, not UTC. Convert at the `kanban-core::time` boundary.
+3. **Card totals come from `Microsoft.VSTS.Scheduling.CompletedWork`**, which 7pace keeps in sync. Fetch
+   it with the other card fields. Never poll 7pace for totals; its rate limits are far tighter than ADO's.
+4. **`$workItemIds` takes at most 100 ids**, and `$count` at most 500 per page.
+5. **No optimistic concurrency.** A 409 means conflict. After any write, refetch the card for the new total.
+6. The 7pace UI or desktop client can also start and stop the timer. Read `tracking/client/current`
+   before showing the timer's state.
+
 ## Security
 
 - The PAT lives **only** in the OS keyring (service `devops-kanban`, account = organization).
   Never write it to `config.toml`, the cache, logs or error messages. `PatAuth`'s `Debug` redacts
   it; keep it that way.
-- The `DEVOPS_KANBAN_PAT` env override is for local development only.
+- The 7pace API token follows the same rules (keyring account `7pace:<organization>`;
+  `SevenPaceToken`'s `Debug` redacts it).
+- The `DEVOPS_KANBAN_PAT` and `DEVOPS_KANBAN_7PACE_TOKEN` env overrides are for local development only.
 
 ## Conventions
 

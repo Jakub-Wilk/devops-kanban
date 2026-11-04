@@ -3,8 +3,8 @@
 A desktop kanban board for **Azure DevOps** work items, built with Rust and
 [Dioxus](https://dioxuslabs.com). It reads your team's existing board configuration (columns,
 state mappings, WIP limits, swimlanes, card fields) and lets you work the board faster than the
-Azure DevOps web UI. Every change is written straight back to Azure DevOps. There is no server
-and no separate database.
+Azure DevOps web UI. Time can be logged through 7pace Timetracker. Every change is written
+straight back to Azure DevOps or 7pace. There is no server and no separate database.
 
 > **Status:** scaffold. The architecture and documentation are in place; features are not
 > implemented yet. The UI design is still to be decided.
@@ -43,6 +43,16 @@ The app authenticates with a **Personal Access Token (PAT)**.
 
 Microsoft Entra sign-in may be added later. The auth layer is designed for it.
 
+### 7pace Timetracker (optional)
+
+Time tracking needs a separate **7pace API token**, because 7pace doesn't accept the Azure DevOps PAT:
+
+1. In Azure DevOps, open *7pace Timetracker → Settings → Reporting & API → Create New Token*.
+2. Paste it in the app's settings. It goes to the OS keyring like the PAT.
+3. The token is valid for 1 year. Renew it in the same 7pace screen.
+
+Hours already tracked appear on cards without a token, because 7pace syncs them into *Completed Work*.
+
 ## Settings
 
 Non-secret settings live in `config.toml` in the platform config directory:
@@ -60,15 +70,17 @@ covers every key, the keyring entry and the environment overrides.
 ## Project layout
 
 ```
-crates/ado-client    Azure DevOps REST client (UI-agnostic)
-crates/kanban-core   Board model, move logic, sync, cache, settings
-crates/app           Dioxus desktop UI
-docs/                Architecture, API notes, settings reference
+crates/ado-client        Azure DevOps REST client (UI-agnostic)
+crates/sevenpace-client  7pace Timetracker REST client (UI-agnostic)
+crates/kanban-core       Board model, move logic, sync, time tracking, cache, settings
+crates/app               Dioxus desktop UI
+docs/                    Architecture, API notes, settings reference
 ```
 
 ## Documentation
 
 - [docs/architecture.md](docs/architecture.md): layers, data flow, state, sync
 - [docs/azure-devops-api.md](docs/azure-devops-api.md): the endpoints used and their quirks
+- [docs/7pace-api.md](docs/7pace-api.md): 7pace Timetracker API (logging time, timer)
 - [docs/settings.md](docs/settings.md): configuration reference
 - [AGENTS.md](AGENTS.md): contributor and AI-agent guide (`CLAUDE.md` imports it)

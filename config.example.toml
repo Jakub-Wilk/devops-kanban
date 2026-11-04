@@ -1,5 +1,5 @@
 # Copy to the platform config dir (Linux: ~/.config/devops-kanban/config.toml).
-# See docs/settings.md for every key. The PAT is NOT stored here — it lives in the OS keyring.
+# See docs/settings.md for every key. Tokens (ADO PAT, 7pace) are NOT stored here — they live in the OS keyring.
 
 organization = "media-press"
 default_project = "IT Finance"
@@ -14,3 +14,8 @@ log_level = "info"
 base_url = "https://dev.azure.com"
 api_version = "7.1"
 max_batch = 200
+
+[time_tracking]
+enabled = true
+base_url = "https://media-press.timehub.7pace.com"
+api_version = "3.2"

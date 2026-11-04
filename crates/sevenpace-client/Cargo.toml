@@ -1,0 +1,21 @@
+[package]
+name = "sevenpace-client"
+description = "Thin, UI-agnostic async client for the 7pace Timetracker REST API"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+ado-client.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+time.workspace = true
+url.workspace = true
+
+[lints]
+workspace = true

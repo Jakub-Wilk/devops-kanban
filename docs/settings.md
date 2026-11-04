@@ -3,7 +3,7 @@
 Settings come from three places, in order of precedence:
 
 1. **Environment variables**, for development and CI only
-2. **OS keyring**, which holds the PAT only
+2. **OS keyring**, which holds the tokens (ADO PAT, 7pace token) only
 3. **`config.toml`**, for everything else
 
 ## `config.toml`
@@ -31,6 +31,9 @@ The Setup view creates this file on first run. Start from
 | `api.base_url`           | string  | `https://dev.azure.com` | ADO host |
 | `api.api_version`        | string  | `7.1`                   | api-version for all stable endpoints |
 | `api.max_batch`          | int     | `200`                   | Ids per `workitemsbatch` call. The ADO maximum is 200 |
+| `time_tracking.enabled`  | bool    | `false`                 | Enable 7pace features (log time, timer). Card totals from `CompletedWork` work without it |
+| `time_tracking.base_url` | string  | `https://{organization}.timehub.7pace.com` | 7pace host |
+| `time_tracking.api_version` | string | `3.2`               | 7pace REST api-version (required on every call) |
 
 Unknown keys are ignored with a warning. The app rewrites the file when settings change in the UI.
 
@@ -39,6 +42,7 @@ Unknown keys are ignored with a warning. The app rewrites the file when settings
 | Service         | Account        | Value |
 |-----------------|----------------|-------|
 | `devops-kanban` | `<organization>` | Personal Access Token |
+| `devops-kanban` | `7pace:<organization>` | 7pace API token |
 
 Backends: Windows Credential Manager, macOS Keychain, Linux Secret Service (GNOME Keyring /
 KWallet). If no Secret Service is running (e.g. headless WSL), the app can't save the token and
@@ -47,12 +51,16 @@ asks for it at each launch. It does not fall back to a plaintext file.
 **PAT requirements:** the organization must match `organization`, and the scope must be **Work Items
 (Read & write)**. When the PAT expires the API returns 401 or 203. The app then returns to Setup.
 
+**7pace token:** created in *7pace Timetracker → Settings → Reporting & API*, valid for 1 year. It
+can't be an ADO PAT. When it expires, only the time-tracking features stop; the board keeps working.
+
 ## Environment overrides
 
 | Variable             | Overrides |
 |----------------------|-----------|
 | `DEVOPS_KANBAN_ORG`  | `organization` |
 | `DEVOPS_KANBAN_PAT`  | the keyring PAT (dev only; it is never written to the keyring) |
+| `DEVOPS_KANBAN_7PACE_TOKEN` | the keyring 7pace token (dev only) |
 | `RUST_LOG`           | `log_level` |
 
 ## Other locations
@@ -60,6 +68,6 @@ asks for it at each launch. It does not fall back to a plaintext file.
 | What   | Where (Linux) | Notes |
 |--------|---------------|-------|
 | Cache  | `~/.cache/devops-kanban/boards/<project>/<team>/<board>.json` | Safe to delete |
-| Logs   | stderr | Never contain the PAT |
+| Logs   | stderr | Never contain either token |
 
 On other platforms the cache path comes from `ProjectDirs::cache_dir()`.
