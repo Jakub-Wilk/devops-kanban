@@ -60,6 +60,16 @@ impl PatchDocument {
         self
     }
 
+    /// Removes the relation at `index` (its position in the item's `relations`).
+    pub fn remove_relation(mut self, index: usize) -> Self {
+        self.0.push(PatchOp {
+            op: "remove".into(),
+            path: format!("/relations/{index}"),
+            value: None,
+        });
+        self
+    }
+
     pub fn is_empty_update(&self) -> bool {
         self.0.iter().all(|op| op.op == "test")
     }
@@ -90,6 +100,16 @@ mod tests {
             ])
         );
         assert_eq!(doc.tested_rev(), Some(7));
+    }
+
+    #[test]
+    fn reparent_removes_then_adds() {
+        let doc = PatchDocument::update(3)
+            .remove_relation(1)
+            .parent("https://dev.azure.com/o/_apis/wit/workItems/9");
+        let v = serde_json::to_value(&doc).unwrap();
+        assert_eq!(v[1], json!({ "op": "remove", "path": "/relations/1" }));
+        assert_eq!(v[2]["value"]["rel"], "System.LinkTypes.Hierarchy-Reverse");
     }
 
     #[test]
