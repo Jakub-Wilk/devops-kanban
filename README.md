@@ -6,8 +6,9 @@ state mappings, WIP limits, swimlanes, card fields) and lets you work the board 
 Azure DevOps web UI. Time can be logged through 7pace Timetracker. Every change is written
 straight back to Azure DevOps or 7pace. There is no server and no separate database.
 
-> **Status:** scaffold. The architecture and documentation are in place; features are not
-> implemented yet. The UI design is still to be decided.
+> **Status:** first implementation. Epic list, kanban (the team's real Features and Stories
+> boards, with hideable columns) and timeline views, with drag and drop written back to Azure
+> DevOps. 7pace time tracking has a client crate but no UI yet.
 
 ## Prerequisites
 

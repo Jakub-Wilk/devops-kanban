@@ -6,7 +6,7 @@
   stays the single source of truth. The app is a client and adds no new data model.
 - **Goal:** respect each team's existing board configuration (columns, state mappings, WIP limits,
   swimlanes, card fields) instead of redefining it.
-- **Non-goal (for now):** the visual and interaction design, web/mobile targets, Entra sign-in, and
+- **Non-goal (for now):** web/mobile targets, Entra sign-in, and
   editing board configuration (columns, rules).
 
 ## Layers
@@ -15,7 +15,7 @@
 ┌───────────────────────────── crates/app (Dioxus desktop) ─────────────────────────────┐
 │ routes.rs   Setup · Board{project,team,board} · Settings                              │
 │ views/      one component per route         components/  cards, columns, dialogs      │
-│ state.rs    Store<BoardState>, settings, drag state, in-flight moves                  │
+│ state.rs    AppState signals: settings, workspace, drag state, in-flight writes       │
 │ services.rs builds client, runs loads/moves/sync as tasks, optimistic update/rollback │
 └──────────────────────────────────────────┬────────────────────────────────────────────┘
                                            │ domain types only
@@ -90,12 +90,17 @@ path handles this. The `Api` error message is shown verbatim.
 
 ## State model (app)
 
-- `Store<BoardState>`, using Dioxus 0.7 `#[derive(Store)]`: board config, `HashMap<CardId, Card>`,
-  and per-column ordered id lists. Per-field stores mean that updating one card re-renders only that
-  card and the columns whose lists changed.
-- `Signal<Settings>`, `Signal<ConnectionStatus>`, `Signal<Option<CardId>>` for the card being
-  dragged, and `Signal<HashMap<CardId, PendingMove>>` for rollback.
-- Context is provided once in `App`. Views read it with `use_context`.
+- `AppState` (`crates/app/src/state.rs`) is a `Copy` struct of `Signal`s, provided once in `App`
+  and read with `use_app()`: settings, the `AdoClient`, load status, the loaded
+  `kanban_core::Workspace` (board configs per backlog level, `HashMap<CardId, Card>`, placements),
+  ids with a write in flight, the dragged item and drop slot, the open dialog and toasts.
+- The workspace is one signal. Boards are a few hundred cards, so re-rendering the active tab on a
+  change is cheap. If that stops being true, move cards into a `#[derive(Store)]` so one card's
+  update re-renders only that card.
+- Rollback keeps a copy of the card (and the board's placement for moves) before the optimistic
+  update and restores it on failure.
+- The stylesheet is embedded with `include_str!` rather than `asset!`. Without `dx`, Dioxus resolves
+  assets next to the executable, so `cargo run` would start unstyled.
 
 ## Sync
 

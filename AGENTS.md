@@ -3,8 +3,10 @@
 Guide for agents and developers working on **devops-kanban**: a Rust + Dioxus **desktop** app
 that provides a more ergonomic kanban board on top of Azure DevOps Boards.
 
-Status: **scaffold**. Module layout, core types and docs exist; feature logic does not. UI/UX
-design is intentionally undecided. Do not invent visual design without being asked.
+Status: **first implementation**. The UI follows the "DevOps Board Manager" design (epic list,
+kanban, timeline, item dialog; dark theme, IBM Plex). Keep new UI consistent with
+`crates/app/assets/main.css` and don't redesign without being asked. 7pace has a client crate but
+no UI yet.
 
 ## Crate map
 
@@ -103,7 +105,7 @@ Time tracking goes through 7pace Timetracker, a **separate service**. See [docs/
 - Every module starts with a `//!` doc comment stating its responsibility. Keep it accurate.
 - Errors: `thiserror` enums per crate. No `unwrap()`/`expect()` outside tests and `main`.
 - Logging: `tracing`. Control the level with `RUST_LOG` or the `log_level` setting.
-- Dioxus: 0.7 APIs (`use_signal`, `use_resource`, `#[derive(Store)]`). Pin `0.7`, since 0.8 is
+- Dioxus: 0.7 APIs (`use_signal`, `use_resource`, `use_reactive!`). Pin `0.7`, since 0.8 is
   alpha with breaking Signals changes. For drag and drop, use HTML5 drag events and keep the dragged
   card id in a signal, not in `dataTransfer`.
 - Tests: unit-test `kanban-core` logic (move planning, column resolution) with fixture JSON
