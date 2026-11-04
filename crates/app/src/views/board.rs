@@ -109,20 +109,6 @@ pub fn Board(project: String, team: String, board: String) -> Element {
     });
 
     let current = tab();
-    let (title, hint) = match current {
-        Tab::List => (
-            "Epic list",
-            "Plan and prioritise epics. Expand one to see its work items, drag rows to reorder.",
-        ),
-        Tab::Kanban => (
-            "Kanban board",
-            "The team's board, columns and all. Drag cards between columns to move them.",
-        ),
-        Tab::Timeline => (
-            "Timeline",
-            "Work items by target date, earliest first. Drag a diamond to reschedule.",
-        ),
-    };
     let it_sel = prefs.iteration.clone();
 
     rsx! {
@@ -140,7 +126,6 @@ pub fn Board(project: String, team: String, board: String) -> Element {
             },
             header { class: "topbar",
                 div { class: "wrap",
-                    div { class: "brand", span { class: "ico", dangerous_inner_html: icons::LOGO } "Board Manager" }
                     Link { class: "ghost", to: Route::Setup {}, aria_label: "Switch project or team",
                         span { class: "dim", "Project" }
                         span { style: "font-weight: 600", "{project} / {team}" }
@@ -197,8 +182,6 @@ pub fn Board(project: String, team: String, board: String) -> Element {
             }
             div { class: "pagehead",
                 div { class: "wrap",
-                    div { class: "titlerow", h1 { "{title}" } }
-                    p { "{hint}" }
                     div { class: "tabs", role: "tablist", aria_label: "Views",
                         TabButton { label: "List", icon: icons::LIST, on: current == Tab::List, count: counts.map(|c| c.0), onclick: move |_| set_tab(Tab::List) }
                         TabButton { label: "Kanban", icon: icons::KANBAN, on: current == Tab::Kanban, count: counts.map(|c| c.1), onclick: move |_| set_tab(Tab::Kanban) }
