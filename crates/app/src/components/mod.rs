@@ -2,5 +2,6 @@
 //! timeline), the item dialog and toasts.
 
 pub mod icons;
+pub mod item_dialog;
 pub mod toast;
 pub mod widgets;
