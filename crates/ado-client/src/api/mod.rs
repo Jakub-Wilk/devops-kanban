@@ -3,6 +3,7 @@
 pub mod backlog;
 pub mod boards;
 pub mod comments;
+pub mod connection;
 pub mod iterations;
 pub mod order;
 pub mod teams;
