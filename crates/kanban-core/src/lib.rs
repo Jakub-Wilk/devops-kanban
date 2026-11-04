@@ -8,12 +8,16 @@ pub mod board;
 pub mod cache;
 pub mod card;
 pub mod config;
+pub mod error;
 pub mod move_plan;
+pub mod states;
 pub mod sync;
 pub mod time;
 
 pub use board::{Board, Column, ColumnKind, Lane};
-pub use card::{Card, CardId};
+pub use card::{Card, CardId, Person};
 pub use config::Settings;
+pub use error::CoreError;
 pub use move_plan::{MovePlan, MoveTarget};
+pub use states::{StateCategory, StateMap};
 pub use sync::SyncEngine;
