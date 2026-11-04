@@ -17,6 +17,7 @@ pub mod states;
 pub mod sync;
 pub mod time;
 pub mod timeline;
+pub mod workspace;
 
 pub use board::{Board, Column, ColumnKind, Lane};
 pub use card::{Card, CardId, Person};
@@ -26,5 +27,6 @@ pub use hierarchy::Hierarchy;
 pub use move_plan::{MoveError, MovePlan, MoveTarget};
 pub use queries::Scope;
 pub use states::{StateCategory, StateMap};
-pub use sync::SyncEngine;
+pub use sync::{InFlight, SyncEngine, SyncEvent};
 pub use timeline::{TimelineItem, TimelineLayout};
+pub use workspace::{BacklogLevel, Iteration, Workspace};
