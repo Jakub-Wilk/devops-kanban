@@ -18,6 +18,6 @@ pub use board::{Board, Column, ColumnKind, Lane};
 pub use card::{Card, CardId, Person};
 pub use config::Settings;
 pub use error::CoreError;
-pub use move_plan::{MovePlan, MoveTarget};
+pub use move_plan::{MoveError, MovePlan, MoveTarget};
 pub use states::{StateCategory, StateMap};
 pub use sync::SyncEngine;
