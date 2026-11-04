@@ -225,7 +225,7 @@ pub fn Timeline() -> Element {
                     role: "separator",
                     aria_orientation: "vertical",
                     aria_label: "Resize the item list",
-                    title: "Drag to resize",
+                    "data-tip": "Drag to resize",
                     onpointerdown: move |e| {
                         e.prevent_default();
                         mode.set(Some(PointerMode::Split { start_client_x: e.client_coordinates().x, start_width: info }));
@@ -234,7 +234,7 @@ pub fn Timeline() -> Element {
                 div { class: "tl-head",
                     div { class: "tl-info", "Work item, earliest target first" }
                     div { class: "tl-gap" }
-                    div { class: "tl-track", title: "Drag to scroll through time", onpointerdown: start_pan,
+                    div { class: "tl-track", onpointerdown: start_pan,
                         for m in months.iter() {
                             span { key: "{m.label}", class: "tl-month", style: "left: {m.left - sx}px; width: {m.width}px", "{m.label}" }
                         }
@@ -247,13 +247,13 @@ pub fn Timeline() -> Element {
                             }
                         }
                         if today_side.is_none() {
-                            span { class: "tl-today-cap", style: "left: {today_px}px", title: "Today" }
+                            span { class: "tl-today-cap", style: "left: {today_px}px", "data-tip": "Today" }
                         }
                         if let Some(side) = today_side {
                             button {
                                 class: "ghost tl-today-btn {side}",
                                 r#type: "button",
-                                title: "Scroll back to today",
+                                "data-tip": "Scroll back to today",
                                 onpointerdown: move |e| e.stop_propagation(),
                                 onclick: move |_| pan_to(home),
                                 if side == "left" { span { class: "ico flip", dangerous_inner_html: icons::CHEVRON_RIGHT } }
@@ -318,7 +318,7 @@ pub fn Timeline() -> Element {
                                         if row.overdue { span { style: "color: var(--warn); font-size: 12px; font-weight: 600", "Overdue" } }
                                     }
                                     StatePill { state: card.state.clone(), category: cat, color }
-                                    Assignee { id, person: card.assigned_to.clone(), title: card.title.clone(), tip_left: true }
+                                    Assignee { id, person: card.assigned_to.clone(), title: card.title.clone() }
                                 }
                                 div { class: "tl-gap" }
                                 div { class: "tl-track", onpointerdown: start_pan,
@@ -334,7 +334,7 @@ pub fn Timeline() -> Element {
                                                 class: "{mk_class}",
                                                 r#type: "button",
                                                 style: "left: {x}px",
-                                                title: "Target date: {date_text}. Drag to change.",
+                                                "data-tip": "Target date: {date_text}. Drag to change.",
                                                 aria_label: "Target date of {card.title}: {date_text}",
                                                 onpointerdown: move |e| {
                                                     e.prevent_default();
@@ -350,7 +350,7 @@ pub fn Timeline() -> Element {
                                             button {
                                                 class: "tl-edge {side}",
                                                 r#type: "button",
-                                                title: "Target date: {date_text}. Click to scroll there.",
+                                                "data-tip": "Target date: {date_text}. Click to scroll there.",
                                                 aria_label: "Scroll to the target date of {card.title}: {date_text}",
                                                 onpointerdown: move |e| e.stop_propagation(),
                                                 onclick: move |_| if let Some(x) = focus_x { pan_to(x) },

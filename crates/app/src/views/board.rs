@@ -144,7 +144,7 @@ pub fn Board(project: String, team: String, board: String) -> Element {
                         class: "ghost icon-only",
                         r#type: "button",
                         aria_label: "Reload from Azure DevOps",
-                        title: "Reload",
+                        "data-tip": "Reload",
                         onclick: {
                             let (p, t) = (project.clone(), team.clone());
                             move |_| services::open_workspace(st, p.clone(), t.clone(), true)

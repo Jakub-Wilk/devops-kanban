@@ -53,7 +53,7 @@ pub fn Prio(priority: Option<u8>) -> Element {
         format!("Priority {p}")
     };
     rsx! {
-        span { class: "prio p{p}", title: "{title}", "{label}" }
+        span { class: "prio p{p}", "data-tip": "{title}", "{label}" }
     }
 }
 
@@ -62,30 +62,20 @@ pub fn Avatar(person: Person, #[props(default)] large: bool) -> Element {
     let initials = person.initials();
     let class = if large { "av lg" } else { "av" };
     rsx! {
-        span { class: "{class}", title: "{person.display_name}", aria_label: "Assigned to {person.display_name}", "{initials}" }
+        span { class: "{class}", "data-tip": "{person.display_name}", aria_label: "Assigned to {person.display_name}", "{initials}" }
     }
 }
 
 /// Avatar when assigned, otherwise a dashed disc that assigns the item to the signed-in user.
 #[component]
-pub fn Assignee(
-    id: CardId,
-    person: Option<Person>,
-    title: String,
-    #[props(default)] tip_left: bool,
-) -> Element {
+pub fn Assignee(id: CardId, person: Option<Person>, title: String) -> Element {
     let st = use_app();
     match person {
         Some(p) => rsx! { Avatar { person: p } },
         None => {
-            let class = if tip_left {
-                "assign tip tip-l"
-            } else {
-                "assign tip"
-            };
             rsx! {
                 button {
-                    class: "{class}",
+                    class: "assign",
                     r#type: "button",
                     "data-tip": "Assign to me",
                     aria_label: "Assign {title} to me",
@@ -126,7 +116,7 @@ pub fn DateLabel(date: Option<Date>, #[props(default)] open: bool) -> Element {
     let class = if late { "date late" } else { "date" };
     let text = short_date(d);
     rsx! {
-        span { class: "{class}", title: if late { "Overdue" } else { "Target date" },
+        span { class: "{class}", "data-tip": if late { "Overdue" } else { "Target date" },
             Icon { svg: icons::CALENDAR }
             span { class: "sr-only", "Target date: " }
             "{text}"

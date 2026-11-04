@@ -144,9 +144,10 @@ main.panel { padding-top: 24px; padding-bottom: 48px; display: flex; flex-direct
 .assign .disc { width: 28px; height: 28px; border-radius: 50%; border: 1.5px dashed #7B879A; color: var(--text-2); display: flex; align-items: center; justify-content: center; transition: background .15s, color .15s, border-color .15s, transform .2s var(--spring); }
 .assign:hover .disc, .assign:focus-visible .disc { background: var(--focus); border: 1.5px solid var(--focus); color: var(--accent-ink); transform: scale(1.08); }
 .assign:focus-visible { outline: 2px solid var(--focus); outline-offset: 0; }
-.tip::after { content: attr(data-tip); position: absolute; bottom: calc(100% + 2px); right: 0; background: var(--text); color: var(--bg); font-size: 12px; font-weight: 600; line-height: 18px; padding: 4px 9px; border-radius: 6px; white-space: nowrap; opacity: 0; transform: translateY(4px); pointer-events: none; z-index: 30; transition: opacity .15s, transform .15s var(--ease); }
-.tip.tip-l::after { right: auto; left: 0; }
-.tip:hover::after, .tip:focus-visible::after { opacity: 1; transform: none; }
+/* the one tooltip (components/tooltip.rs): any element with data-tip */
+.tip-bubble { position: fixed; top: 0; left: 0; z-index: 70; width: max-content; max-width: min(360px, calc(100vw - 8px)); background: var(--text); color: var(--bg); font-size: 12px; font-weight: 600; line-height: 18px; padding: 4px 9px; border-radius: 6px; overflow-wrap: anywhere; opacity: 0; transform: translateY(4px); pointer-events: none; transition: opacity .15s, transform .15s var(--ease); }
+.tip-bubble.below { transform: translateY(-4px); }
+.tip-bubble.on { opacity: 1; transform: none; }
 
 .etitle { background: none; border: 0; padding: 0; min-height: 40px; text-align: left; font-weight: 600; font-size: 15px; color: var(--text); border-radius: 6px; line-height: 1.35; }
 .etitle.sm { font-size: 14px; font-weight: 500; }
@@ -214,7 +215,7 @@ main.panel { padding-top: 24px; padding-bottom: 48px; display: flex; flex-direct
 .card.pending::before { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; background: linear-gradient(100deg, transparent 30%, rgba(124, 155, 255, .12) 50%, transparent 70%); background-size: 220% 100%; animation: shimmer 1.1s linear infinite; }
 .card .top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .card .top > span { display: inline-flex; align-items: center; gap: 8px; }
-.epic-chip { font-family: var(--mono); font-size: 12px; font-weight: 500; color: var(--muted); background: var(--chip); border-radius: 6px; padding: 1px 7px; max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.epic-chip { display: block; align-self: flex-start; max-width: 100%; font-family: var(--mono); font-size: 12px; font-weight: 500; color: var(--muted); background: var(--chip); border-radius: 6px; padding: 1px 7px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .card .etitle { min-height: 0; padding: 2px 0; width: 100%; }
 .card .bottom { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 28px; }
 .card .tags { display: flex; flex-wrap: wrap; gap: 4px; }

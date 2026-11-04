@@ -17,6 +17,7 @@ mod views;
 
 use components::item_dialog::ItemDialog;
 use components::toast::Toasts;
+use components::tooltip::TooltipLayer;
 use routes::Route;
 use state::AppState;
 
@@ -77,5 +78,6 @@ fn App() -> Element {
         Router::<Route> {}
         ItemDialog {}
         Toasts {}
+        TooltipLayer {}
     }
 }

@@ -134,7 +134,7 @@ pub fn EpicList(search_focus: Signal<Option<std::rc::Rc<MountedData>>>) -> Eleme
                 button {
                     class: "ghost icon-only",
                     r#type: "button",
-                    title: "Expand all",
+                    "data-tip": "Expand all",
                     aria_label: "Expand all",
                     disabled: all_open,
                     onclick: {
@@ -149,7 +149,7 @@ pub fn EpicList(search_focus: Signal<Option<std::rc::Rc<MountedData>>>) -> Eleme
                 button {
                     class: "ghost icon-only",
                     r#type: "button",
-                    title: "Collapse all",
+                    "data-tip": "Collapse all",
                     aria_label: "Collapse all",
                     disabled: none_open,
                     onclick: move |_| {
@@ -211,7 +211,7 @@ pub fn EpicList(search_focus: Signal<Option<std::rc::Rc<MountedData>>>) -> Eleme
                                 span {
                                     class: "grip",
                                     draggable: "true",
-                                    title: "Drag to reorder",
+                                    "data-tip": "Drag to reorder",
                                     ondragstart: move |e| {
                                         let _ = e.data_transfer().set_data("text/plain", &id.to_string());
                                         e.data_transfer().set_effect_allowed("move");
@@ -246,18 +246,18 @@ pub fn EpicList(search_focus: Signal<Option<std::rc::Rc<MountedData>>>) -> Eleme
                                         "{epic.title}"
                                     }
                                 }
-                                span { class: "area", title: "Area: {epic.area_path}",
+                                span { class: "area", "data-tip": "Area: {epic.area_path}",
                                     Icon { svg: icons::FOLDER }
                                     span { "{epic.area_leaf()}" }
                                 }
                                 StatePill { state: epic.state.clone(), category: cat, color }
-                                div { class: "progress", title: "{done} of {total} work items done",
+                                div { class: "progress", "data-tip": "{done} of {total} work items done",
                                     div { class: "bar-track",
                                         div { class: "bar-fill", style: "width: {pct}%" }
                                     }
                                     span { class: "id", style: "width: 44px; text-align: right", "{done}/{total}" }
                                 }
-                                span { class: "iter", title: "{epic.iteration_path}", "{epic.iteration_leaf()}" }
+                                span { class: "iter", "data-tip": "{epic.iteration_path}", "{epic.iteration_leaf()}" }
                                 span { style: "width: 104px", DateLabel { date: epic.target_date, open: open_state } }
                                 Assignee { id, person: epic.assigned_to.clone(), title: epic.title.clone() }
                                 if pending.contains(&id) { span { class: "spinner", style: "color: var(--accent)" } }
@@ -371,7 +371,7 @@ fn ChildRow(
             span {
                 class: "grip",
                 draggable: "true",
-                title: "Drag to reorder",
+                "data-tip": "Drag to reorder",
                 ondragstart: move |e| {
                     let _ = e.data_transfer().set_data("text/plain", &id.to_string());
                     st.drag.set(Some(Drag::Row { id, root: Some(root) }));

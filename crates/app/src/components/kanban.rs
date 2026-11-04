@@ -259,7 +259,7 @@ pub fn Kanban(board: String) -> Element {
                             StatePill { state: h.name.clone(), category: h.category, color: h.color.clone() }
                             span { class: "count", "{h.shown}" }
                             if h.limit > 0 {
-                                span { class: if h.total > h.limit as usize { "wip over" } else { "wip" }, title: "WIP limit", "{h.total}/{h.limit}" }
+                                span { class: if h.total > h.limit as usize { "wip over" } else { "wip" }, "data-tip": "WIP limit", "{h.total}/{h.limit}" }
                             }
                         }
                     }
@@ -576,9 +576,9 @@ fn CardView(
                     span { class: "id", "{id}" }
                     Prio { priority: card.priority }
                 }
-                if let Some((eid, title)) = epic {
-                    span { class: "epic-chip", title: "{eid} {title}", "{eid} {title}" }
-                }
+            }
+            if let Some((eid, title)) = epic {
+                span { class: "epic-chip", "data-tip": "{eid} {title}", "{eid} {title}" }
             }
             button {
                 class: "etitle sm",
@@ -594,7 +594,7 @@ fn CardView(
                 }
             }
             div { class: "bottom",
-                Assignee { id, person: card.assigned_to.clone(), title: card.title.clone(), tip_left: true }
+                Assignee { id, person: card.assigned_to.clone(), title: card.title.clone() }
                 DateLabel { date: card.target_date, open: !category.is_done() }
             }
         }
