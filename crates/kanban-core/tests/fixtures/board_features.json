@@ -1,0 +1,18 @@
+{
+  "id": "00bbff21-a578-42fb-b87f-4f2a294f24bd",
+  "name": "Features",
+  "revision": 0,
+  "columns": [
+    { "id": "03a52a00-39fc-45c1-b9a4-b0f3869b09cc", "name": "New", "itemLimit": 0, "stateMappings": { "Feature": "New" }, "columnType": "incoming" },
+    { "id": "6fa33511-b3d8-4f8f-8aca-7256674bb18f", "name": "Active", "itemLimit": 5, "stateMappings": { "Feature": "Active" }, "isSplit": false, "columnType": "inProgress" },
+    { "id": "e61da5aa-9955-4c37-b182-c63b9d733403", "name": "Resolved", "itemLimit": 5, "stateMappings": { "Feature": "Resolved" }, "isSplit": false, "columnType": "inProgress" },
+    { "id": "c6e187e0-53b2-4fdc-b060-a261b9eaa636", "name": "Closed", "itemLimit": 0, "stateMappings": { "Feature": "Closed" }, "columnType": "outgoing" }
+  ],
+  "rows": [ { "id": "00000000-0000-0000-0000-000000000000" } ],
+  "isValid": true,
+  "fields": {
+    "columnField": { "referenceName": "WEF_CEF86AE0097048AC812A94B1200EF848_Kanban.Column" },
+    "rowField": { "referenceName": "WEF_CEF86AE0097048AC812A94B1200EF848_Kanban.Lane" },
+    "doneField": { "referenceName": "WEF_CEF86AE0097048AC812A94B1200EF848_Kanban.Column.Done" }
+  }
+}

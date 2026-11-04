@@ -1,0 +1,24 @@
+{
+  "id": "fd39ad49-2f5a-41be-8ede-bce5db8c7c0e",
+  "name": "Stories",
+  "revision": 0,
+  "columns": [
+    { "id": "96694e5a-eb95-40f6-8da7-99b5531a5aee", "name": "New", "itemLimit": 0, "stateMappings": { "User Story": "New" }, "columnType": "incoming" },
+    { "id": "0b4f8ee7-4195-4c6f-9ff6-3e7a3feae068", "name": "Active", "itemLimit": 5, "stateMappings": { "User Story": "Active" }, "isSplit": false, "columnType": "inProgress" },
+    { "id": "899a4497-a519-4cb7-864b-cdc1838e2965", "name": "Blocked", "itemLimit": 5, "stateMappings": { "User Story": "Blocked" }, "isSplit": false, "columnType": "inProgress" },
+    { "id": "052e4d5d-bdcb-47e2-908e-41fd7ecf5ddb", "name": "Paused", "itemLimit": 5, "stateMappings": { "User Story": "Paused" }, "isSplit": false, "columnType": "inProgress" },
+    { "id": "06df12cf-9461-4d64-a7f8-87621fdeb9f3", "name": "Ready", "itemLimit": 5, "stateMappings": { "User Story": "Ready" }, "isSplit": false, "columnType": "inProgress" },
+    { "id": "39d1716b-cb75-4dcd-9a0a-ab91f3c69ae7", "name": "Done", "itemLimit": 5, "stateMappings": { "User Story": "Done" }, "isSplit": false, "columnType": "inProgress" },
+    { "id": "8cc5746d-50d3-4855-a226-48c965332e5e", "name": "TEST-ACTIVE", "itemLimit": 5, "stateMappings": { "User Story": "TEST-ACTIVE" }, "isSplit": false, "columnType": "inProgress" },
+    { "id": "18431160-f43a-4b71-a814-f4ac276c8091", "name": "TEST-FAILED", "itemLimit": 5, "stateMappings": { "User Story": "TEST-FAILED" }, "isSplit": false, "columnType": "inProgress" },
+    { "id": "af2ec698-5385-46c0-b3d4-b134e6b33e07", "name": "Closed", "itemLimit": 0, "stateMappings": { "User Story": "Closed" }, "columnType": "outgoing" }
+  ],
+  "rows": [ { "id": "00000000-0000-0000-0000-000000000000" } ],
+  "isValid": true,
+  "canEdit": false,
+  "fields": {
+    "columnField": { "referenceName": "WEF_05102A5E6E294938B163F2FBD09ECDF2_Kanban.Column" },
+    "rowField": { "referenceName": "WEF_05102A5E6E294938B163F2FBD09ECDF2_Kanban.Lane" },
+    "doneField": { "referenceName": "WEF_05102A5E6E294938B163F2FBD09ECDF2_Kanban.Column.Done" }
+  }
+}

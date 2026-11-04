@@ -1,0 +1,18 @@
+{
+  "taskBacklog": { "id": "Microsoft.TaskCategory", "name": "Tasks", "rank": 1, "workItemTypes": [ { "name": "Task" } ], "defaultWorkItemType": { "name": "Task" }, "isHidden": false },
+  "requirementBacklog": { "id": "Microsoft.RequirementCategory", "name": "Stories", "rank": 2, "workItemTypes": [ { "name": "User Story" } ], "defaultWorkItemType": { "name": "User Story" }, "isHidden": false },
+  "portfolioBacklogs": [
+    { "id": "Microsoft.EpicCategory", "name": "Epics", "rank": 4, "workItemTypes": [ { "name": "Epic" } ], "defaultWorkItemType": { "name": "Epic" }, "isHidden": false },
+    { "id": "Microsoft.FeatureCategory", "name": "Features", "rank": 3, "workItemTypes": [ { "name": "Feature" } ], "defaultWorkItemType": { "name": "Feature" }, "isHidden": false }
+  ],
+  "workItemTypeMappedStates": [
+    { "workItemTypeName": "Epic", "states": { "New": "Proposed", "Active": "InProgress", "Resolved": "InProgress", "Closed": "Completed" } },
+    { "workItemTypeName": "User Story", "states": { "New": "Proposed", "Active": "InProgress", "Blocked": "InProgress", "Paused": "InProgress", "Ready": "InProgress", "Done": "Resolved", "TEST-ACTIVE": "Resolved", "TEST-FAILED": "Resolved", "Closed": "Completed" } },
+    { "workItemTypeName": "Task", "states": { "New": "Proposed", "Active": "InProgress", "Blocked": "InProgress", "Paused": "InProgress", "Done": "Resolved", "TEST-ACTIVE": "Resolved", "TEST-FAILED": "Resolved", "Closed": "Completed" } },
+    { "workItemTypeName": "Feature", "states": { "New": "Proposed", "Active": "InProgress", "Resolved": "InProgress", "Closed": "Completed" } },
+    { "workItemTypeName": "Bug", "states": { "New": "Proposed", "Active": "InProgress", "Blocked": "InProgress", "Paused": "InProgress", "Ready": "InProgress", "Resolved": "Resolved", "Done": "Resolved", "TEST-ACTIVE": "Resolved", "TEST-FAILED": "Resolved", "Closed": "Completed" } }
+  ],
+  "backlogFields": { "typeFields": { "Order": "Microsoft.VSTS.Common.StackRank", "Effort": "Microsoft.VSTS.Scheduling.StoryPoints", "RemainingWork": "Microsoft.VSTS.Scheduling.RemainingWork", "Activity": "Microsoft.VSTS.Common.Activity", "Team": "System.AreaPath" } },
+  "bugsBehavior": "off",
+  "isBugsBehaviorConfigured": true
+}

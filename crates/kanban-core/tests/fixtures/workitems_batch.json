@@ -1,0 +1,53 @@
+{
+  "count": 4,
+  "value": [
+    {
+      "id": 111354, "rev": 11,
+      "fields": {
+        "System.Id": 111354, "System.AreaPath": "IT Finance\\Penny", "System.Rev": 11, "System.IterationPath": "IT Finance",
+        "System.WorkItemType": "User Story", "System.State": "Paused",
+        "System.AssignedTo": { "displayName": "Ada Lovelace", "id": "00000000-0000-0000-0000-00000000000a", "uniqueName": "ada@example.com", "imageUrl": "https://example.com/a.png" },
+        "System.Parent": 118181, "System.Title": "Przerobić moduł Contractor Accounts",
+        "System.BoardColumn": "Paused", "System.BoardColumnDone": false,
+        "Microsoft.VSTS.Common.Priority": 3, "Microsoft.VSTS.Common.StackRank": 1604929577.0, "System.Tags": "jira:P1-125"
+      },
+      "url": "https://dev.azure.com/media-press/_apis/wit/workItems/111354"
+    },
+    {
+      "id": 118254, "rev": 8,
+      "fields": {
+        "System.Id": 118254, "System.AreaPath": "IT Finance\\Penny", "System.Rev": 8, "System.IterationPath": "IT Finance",
+        "System.WorkItemType": "Epic", "System.State": "Active",
+        "System.AssignedTo": { "displayName": "Grace Hopper", "id": "00000000-0000-0000-0000-00000000000b", "uniqueName": "grace@example.com", "imageUrl": "https://example.com/g.png" },
+        "System.Title": "Penny API - rozszerzenie funkcjonalności",
+        "System.BoardColumn": "Active", "System.BoardColumnDone": false,
+        "Microsoft.VSTS.Common.Priority": 2, "Microsoft.VSTS.Common.StackRank": 1999979502.0
+      },
+      "url": "https://dev.azure.com/media-press/_apis/wit/workItems/118254"
+    },
+    {
+      "id": 118258, "rev": 5,
+      "fields": {
+        "System.Id": 118258, "System.AreaPath": "IT Finance\\Penny", "System.Rev": 5, "System.IterationPath": "IT Finance",
+        "System.WorkItemType": "User Story", "System.State": "Done",
+        "System.AssignedTo": { "displayName": "Grace Hopper", "id": "00000000-0000-0000-0000-00000000000b", "uniqueName": "grace@example.com", "imageUrl": "https://example.com/g.png" },
+        "System.Parent": 118254, "System.Title": "External API: filtr otwartych faktur (saldo ≠ 0) i spójny settlement_status",
+        "System.BoardColumn": "Done", "System.BoardColumnDone": false,
+        "Microsoft.VSTS.Common.Priority": 3
+      },
+      "url": "https://dev.azure.com/media-press/_apis/wit/workItems/118258"
+    },
+    {
+      "id": 118429, "rev": 3,
+      "fields": {
+        "System.Id": 118429, "System.AreaPath": "IT Finance\\HeMan", "System.Rev": 3, "System.IterationPath": "IT Finance",
+        "System.WorkItemType": "User Story", "System.State": "Active",
+        "System.AssignedTo": { "displayName": "Alan Turing", "id": "00000000-0000-0000-0000-00000000000c", "uniqueName": "alan@example.com", "imageUrl": "https://example.com/t.png" },
+        "System.Parent": 118427, "System.Title": "Deployment na produkcję",
+        "System.BoardColumn": "Active", "System.BoardColumnDone": false,
+        "Microsoft.VSTS.Common.Priority": 2, "Microsoft.VSTS.Scheduling.TargetDate": "2026-11-20T00:00:00Z"
+      },
+      "url": "https://dev.azure.com/media-press/_apis/wit/workItems/118429"
+    }
+  ]
+}
