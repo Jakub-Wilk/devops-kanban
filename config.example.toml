@@ -19,3 +19,7 @@ max_batch = 200
 enabled = true
 base_url = "https://media-press.timehub.7pace.com"
 api_version = "3.2"
+
+# Per-board UI preferences, written by the app (Kanban → Columns menu).
+# [boards."IT Finance/IT Finance Team/Stories"]
+# hidden_columns = ["TEST-FAILED", "Closed"]

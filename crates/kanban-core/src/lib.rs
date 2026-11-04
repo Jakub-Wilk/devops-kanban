@@ -20,7 +20,7 @@ pub mod timeline;
 
 pub use board::{Board, Column, ColumnKind, Lane};
 pub use card::{Card, CardId, Person};
-pub use config::Settings;
+pub use config::{BoardPrefs, Settings};
 pub use error::CoreError;
 pub use hierarchy::Hierarchy;
 pub use move_plan::{MoveError, MovePlan, MoveTarget};

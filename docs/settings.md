@@ -28,6 +28,7 @@ The Setup view creates this file on first run. Start from
 | `poll_interval_secs`     | int     | `30`                    | Delta-sync interval. Values below 10 are clamped to 10 to stay within rate limits |
 | `cache_enabled`          | bool    | `true`                  | Persist the last board snapshot for instant startup |
 | `log_level`              | string  | `info`                  | `tracing` filter (`RUST_LOG` syntax). `RUST_LOG` overrides it |
+| `last_view`              | string? | none                    | Last tab on the board screen: `list`, `kanban` or `timeline` |
 | `api.base_url`           | string  | `https://dev.azure.com` | ADO host |
 | `api.api_version`        | string  | `7.1`                   | api-version for all stable endpoints |
 | `api.max_batch`          | int     | `200`                   | Ids per `workitemsbatch` call. The ADO maximum is 200 |
@@ -35,7 +36,21 @@ The Setup view creates this file on first run. Start from
 | `time_tracking.base_url` | string  | `https://{organization}.timehub.7pace.com` | 7pace host |
 | `time_tracking.api_version` | string | `3.2`               | 7pace REST api-version (required on every call) |
 
-Unknown keys are ignored with a warning. The app rewrites the file when settings change in the UI.
+### Per-board preferences
+
+`[boards."<project>/<team>/<board>"]` tables hold UI preferences the app writes when you change
+them on the kanban. Delete a table to reset that board.
+
+| Key              | Type     | Default | Meaning |
+|------------------|----------|---------|---------|
+| `hidden_columns` | string[] | `[]`    | Column names hidden on that board (from the *Columns* menu) |
+
+```toml
+[boards."IT Finance/IT Finance Team/Stories"]
+hidden_columns = ["TEST-FAILED", "Closed"]
+```
+
+Unknown keys are ignored. The app rewrites the file when settings change in the UI.
 
 ## Secrets: the OS keyring
 

@@ -3,11 +3,19 @@
 //! 7pace token). Env overrides `DEVOPS_KANBAN_ORG`, `DEVOPS_KANBAN_PAT` and
 //! `DEVOPS_KANBAN_7PACE_TOKEN` take precedence (dev only). Schema: `docs/settings.md`.
 
+use std::collections::BTreeMap;
+use std::path::PathBuf;
+
+use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 
-pub const KEYRING_SERVICE: &str = "devops-kanban";
+use crate::error::CoreError;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+pub const KEYRING_SERVICE: &str = "devops-kanban";
+const MIN_POLL_SECS: u64 = 10;
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Settings {
     pub organization: String,
     pub default_project: Option<String>,
@@ -16,11 +24,16 @@ pub struct Settings {
     pub poll_interval_secs: u64,
     pub cache_enabled: bool,
     pub log_level: String,
+    /// Last tab shown on the board screen: `list`, `kanban` or `timeline`.
+    pub last_view: Option<String>,
     pub api: ApiSettings,
     pub time_tracking: TimeTrackingSettings,
+    /// Per-board UI preferences, keyed `"<project>/<team>/<board>"`.
+    pub boards: BTreeMap<String, BoardPrefs>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct ApiSettings {
     pub base_url: String,
     pub api_version: String,
@@ -28,10 +41,222 @@ pub struct ApiSettings {
 }
 
 /// 7pace Timetracker. Off by default; needs a 7pace API token in the keyring.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct TimeTrackingSettings {
     pub enabled: bool,
     /// `https://{organization}.timehub.7pace.com`
     pub base_url: String,
     pub api_version: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BoardPrefs {
+    /// Column names hidden on the kanban.
+    pub hidden_columns: Vec<String>,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            organization: String::new(),
+            default_project: None,
+            default_team: None,
+            default_board: None,
+            poll_interval_secs: 30,
+            cache_enabled: true,
+            log_level: "info".into(),
+            last_view: None,
+            api: ApiSettings::default(),
+            time_tracking: TimeTrackingSettings::default(),
+            boards: BTreeMap::new(),
+        }
+    }
+}
+
+impl Default for ApiSettings {
+    fn default() -> Self {
+        Self {
+            base_url: "https://dev.azure.com".into(),
+            api_version: "7.1".into(),
+            max_batch: 200,
+        }
+    }
+}
+
+impl Default for TimeTrackingSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            base_url: String::new(),
+            api_version: "3.2".into(),
+        }
+    }
+}
+
+pub fn project_dirs() -> Option<ProjectDirs> {
+    ProjectDirs::from("tv", "media-press", "devops-kanban")
+}
+
+impl Settings {
+    pub fn path() -> Option<PathBuf> {
+        project_dirs().map(|d| d.config_dir().join("config.toml"))
+    }
+
+    /// Loads `config.toml` (defaults when absent) and applies env overrides.
+    pub fn load() -> Result<Self, CoreError> {
+        let mut settings = match Self::path() {
+            Some(path) if path.exists() => Self::from_toml(&std::fs::read_to_string(path)?)?,
+            _ => Self::default(),
+        };
+        if let Ok(org) = std::env::var("DEVOPS_KANBAN_ORG")
+            && !org.is_empty()
+        {
+            settings.organization = org;
+        }
+        Ok(settings)
+    }
+
+    pub fn from_toml(s: &str) -> Result<Self, CoreError> {
+        let mut settings: Self = toml::from_str(s).map_err(|e| CoreError::Config(e.to_string()))?;
+        settings.normalize();
+        Ok(settings)
+    }
+
+    pub fn to_toml(&self) -> Result<String, CoreError> {
+        toml::to_string_pretty(self).map_err(|e| CoreError::Config(e.to_string()))
+    }
+
+    pub fn save(&self) -> Result<(), CoreError> {
+        let path = Self::path().ok_or_else(|| CoreError::Config("no config directory".into()))?;
+        if let Some(dir) = path.parent() {
+            std::fs::create_dir_all(dir)?;
+        }
+        std::fs::write(path, self.to_toml()?)?;
+        Ok(())
+    }
+
+    fn normalize(&mut self) {
+        self.poll_interval_secs = self.poll_interval_secs.max(MIN_POLL_SECS);
+        self.api.max_batch = self.api.max_batch.clamp(1, 200);
+        if self.time_tracking.base_url.is_empty() && !self.organization.is_empty() {
+            self.time_tracking.base_url =
+                format!("https://{}.timehub.7pace.com", self.organization);
+        }
+    }
+
+    pub fn is_configured(&self) -> bool {
+        !self.organization.trim().is_empty()
+    }
+
+    pub fn board_key(project: &str, team: &str, board: &str) -> String {
+        format!("{project}/{team}/{board}")
+    }
+
+    pub fn board_prefs(&self, project: &str, team: &str, board: &str) -> BoardPrefs {
+        self.boards
+            .get(&Self::board_key(project, team, board))
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    pub fn set_board_prefs(&mut self, project: &str, team: &str, board: &str, prefs: BoardPrefs) {
+        let key = Self::board_key(project, team, board);
+        if prefs == BoardPrefs::default() {
+            self.boards.remove(&key);
+        } else {
+            self.boards.insert(key, prefs);
+        }
+    }
+}
+
+/// The ADO PAT: `DEVOPS_KANBAN_PAT`, else the keyring. `Ok(None)` when not stored.
+pub fn load_pat(organization: &str) -> Result<Option<String>, CoreError> {
+    if let Ok(pat) = std::env::var("DEVOPS_KANBAN_PAT")
+        && !pat.is_empty()
+    {
+        return Ok(Some(pat));
+    }
+    keyring_get(organization)
+}
+
+/// Stores the PAT in the keyring. Fails (and stores nothing) without a keyring backend.
+pub fn store_pat(organization: &str, pat: &str) -> Result<(), CoreError> {
+    keyring_entry(organization)?
+        .set_password(pat)
+        .map_err(|e| CoreError::Keyring(e.to_string()))
+}
+
+pub fn delete_pat(organization: &str) -> Result<(), CoreError> {
+    match keyring_entry(organization)?.delete_credential() {
+        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+        Err(e) => Err(CoreError::Keyring(e.to_string())),
+    }
+}
+
+fn keyring_entry(account: &str) -> Result<keyring::Entry, CoreError> {
+    keyring::Entry::new(KEYRING_SERVICE, account).map_err(|e| CoreError::Keyring(e.to_string()))
+}
+
+fn keyring_get(account: &str) -> Result<Option<String>, CoreError> {
+    match keyring_entry(account)?.get_password() {
+        Ok(v) => Ok(Some(v)),
+        Err(keyring::Error::NoEntry) => Ok(None),
+        Err(e) => Err(CoreError::Keyring(e.to_string())),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn example_config_parses() {
+        let s = Settings::from_toml(include_str!("../../../config.example.toml")).unwrap();
+        assert_eq!(s.organization, "media-press");
+        assert_eq!(s.api.api_version, "7.1");
+        assert_eq!(s.poll_interval_secs, 30);
+    }
+
+    #[test]
+    fn defaults_and_clamps() {
+        let s = Settings::from_toml(
+            "organization = \"x\"\npoll_interval_secs = 2\n[api]\nmax_batch = 999",
+        )
+        .unwrap();
+        assert_eq!(s.poll_interval_secs, 10);
+        assert_eq!(s.api.max_batch, 200);
+        assert!(s.cache_enabled);
+        assert_eq!(s.time_tracking.base_url, "https://x.timehub.7pace.com");
+    }
+
+    #[test]
+    fn hidden_columns_round_trip() {
+        let mut s = Settings {
+            organization: "o".into(),
+            ..Settings::default()
+        };
+        s.set_board_prefs(
+            "IT Finance",
+            "IT Finance Team",
+            "Stories",
+            BoardPrefs {
+                hidden_columns: vec!["Closed".into(), "TEST-FAILED".into()],
+            },
+        );
+        let back = Settings::from_toml(&s.to_toml().unwrap()).unwrap();
+        assert_eq!(
+            back.board_prefs("IT Finance", "IT Finance Team", "Stories")
+                .hidden_columns,
+            vec!["Closed", "TEST-FAILED"]
+        );
+        s.set_board_prefs(
+            "IT Finance",
+            "IT Finance Team",
+            "Stories",
+            BoardPrefs::default(),
+        );
+        assert!(s.boards.is_empty());
+    }
 }
