@@ -13,6 +13,9 @@ pub struct IdentityRef {
     pub unique_name: Option<String>,
     #[serde(default)]
     pub image_url: Option<String>,
+    /// Graph subject descriptor (`aad.…`), which keys the user's avatar.
+    #[serde(default)]
+    pub descriptor: Option<String>,
 }
 
 /// `GET _apis/connectionData`.
@@ -26,6 +29,9 @@ pub struct ConnectionData {
 #[serde(rename_all = "camelCase")]
 pub struct AuthenticatedUser {
     pub id: String,
+    /// Graph subject descriptor (`aad.…`), which keys the user's avatar.
+    #[serde(default)]
+    pub subject_descriptor: Option<String>,
     #[serde(default)]
     pub provider_display_name: Option<String>,
     #[serde(default)]

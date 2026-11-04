@@ -3,8 +3,9 @@
 //! Owns everything that is "kanban logic" rather than HTTP or rendering: building a [`Board`]
 //! from ADO board config + work items, deciding which fields a move must patch, the epic
 //! hierarchy, view filters, timeline layout, WIQL scoping, background delta sync, time tracking, the on-disk
-//! cache and user settings. No Dioxus dependency.
+//! caches (workspace, avatars) and user settings. No Dioxus dependency.
 
+pub mod avatars;
 pub mod board;
 pub mod cache;
 pub mod card;

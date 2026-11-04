@@ -6,7 +6,7 @@
       "fields": {
         "System.Id": 111354, "System.AreaPath": "IT Finance\\Penny", "System.Rev": 11, "System.IterationPath": "IT Finance",
         "System.WorkItemType": "User Story", "System.State": "Paused",
-        "System.AssignedTo": { "displayName": "Ada Lovelace", "id": "00000000-0000-0000-0000-00000000000a", "uniqueName": "ada@example.com", "imageUrl": "https://example.com/a.png" },
+        "System.AssignedTo": { "displayName": "Ada Lovelace", "id": "00000000-0000-0000-0000-00000000000a", "uniqueName": "ada@example.com", "imageUrl": "https://example.com/a.png", "descriptor": "aad.QWRhIExvdmVsYWNl" },
         "System.Parent": 118181, "System.Title": "Przerobić moduł Contractor Accounts",
         "System.BoardColumn": "Paused", "System.BoardColumnDone": false,
         "Microsoft.VSTS.Common.Priority": 3, "Microsoft.VSTS.Common.StackRank": 1604929577.0, "System.Tags": "jira:P1-125"

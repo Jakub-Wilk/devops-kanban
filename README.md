@@ -36,8 +36,8 @@ cargo test --workspace
 The app authenticates with a **Personal Access Token (PAT)**.
 
 1. In Azure DevOps, open *User settings → Personal access tokens → New token*.
-2. Set the organization (e.g. `media-press`) and the scope **Work Items: Read & write**. No other
-   scopes are needed.
+2. Set the organization (e.g. `media-press`) and the scope **Work Items: Read & write**. Add
+   **Graph: Read** to see people's profile pictures; without it the app shows initials.
 3. On first launch, enter the organization and paste the token. The app stores the token in your
    OS keyring (Windows Credential Manager, macOS Keychain, or Secret Service on Linux), never in a file.
 4. Pick project → team → board.

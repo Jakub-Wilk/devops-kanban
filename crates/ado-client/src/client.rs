@@ -57,6 +57,8 @@ pub(crate) struct Request<'a> {
     pub path: &'a str,
     pub query: Vec<(&'a str, String)>,
     pub api_version: Option<&'a str>,
+    /// Send to the identity host (`vssps.dev.azure.com`) instead of `dev.azure.com`.
+    pub vssps: bool,
     pub body: Option<serde_json::Value>,
     pub json_patch: bool,
     /// Work item id a failed `test /rev` refers to.
@@ -71,6 +73,7 @@ impl<'a> Request<'a> {
             path,
             query: Vec::new(),
             api_version: None,
+            vssps: false,
             body: None,
             json_patch: false,
             conflict_id: None,
@@ -84,6 +87,12 @@ impl<'a> Request<'a> {
 
     pub fn api_version(mut self, version: &'a str) -> Self {
         self.api_version = Some(version);
+        self
+    }
+
+    /// Graph (users, avatars) lives on the identity host.
+    pub fn vssps(mut self) -> Self {
+        self.vssps = true;
         self
     }
 
@@ -140,6 +149,10 @@ impl AdoClient {
 
     pub(crate) fn url(&self, req: &Request<'_>) -> Url {
         let mut url = self.config.base_url.clone();
+        // Only the cloud splits hosts; a custom (on-premises) base URL serves everything.
+        if req.vssps && url.host_str() == Some("dev.azure.com") {
+            let _ = url.set_host(Some("vssps.dev.azure.com"));
+        }
         if let Ok(mut seg) = url.path_segments_mut() {
             seg.pop_if_empty().push(&self.config.organization);
             match req.scope {
@@ -324,6 +337,18 @@ mod tests {
         let req = Request::new(Method::GET, Scope::Project("P"), "wit/workItems/1/comments")
             .api_version("7.1-preview.4");
         assert!(c.url(&req).as_str().ends_with("api-version=7.1-preview.4"));
+    }
+
+    #[test]
+    fn graph_goes_to_the_identity_host() {
+        let c = client();
+        let req = Request::new(Method::GET, Scope::Org, "graph/Subjects/aad.MjQz/avatars")
+            .api_version("7.1-preview.1")
+            .vssps();
+        assert_eq!(
+            c.url(&req).as_str(),
+            "https://vssps.dev.azure.com/media-press/_apis/graph/Subjects/aad.MjQz/avatars?api-version=7.1-preview.1"
+        );
     }
 
     #[test]

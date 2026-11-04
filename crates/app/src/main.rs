@@ -15,6 +15,7 @@ mod services;
 mod state;
 mod views;
 
+use components::avatars::AvatarServer;
 use components::item_dialog::ItemDialog;
 use components::toast::Toasts;
 use components::tooltip::TooltipLayer;
@@ -79,5 +80,6 @@ fn App() -> Element {
         ItemDialog {}
         Toasts {}
         TooltipLayer {}
+        AvatarServer {}
     }
 }

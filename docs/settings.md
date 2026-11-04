@@ -97,7 +97,8 @@ KWallet). If no Secret Service is running (e.g. headless WSL), the app can't sav
 asks for it at each launch. It does not fall back to a plaintext file.
 
 **PAT requirements:** the organization must match `organization`, and the scope must be **Work Items
-(Read & write)**. When the PAT expires the API returns 401 or 203. The app then returns to Setup.
+(Read & write)**. Add **Graph (Read)** for profile pictures; without it avatars show initials. When
+the PAT expires the API returns 401 or 203. The app then returns to Setup.
 
 **7pace token:** created in *7pace Timetracker → Settings → Reporting & API*, valid for 1 year. It
 can't be an ADO PAT. When it expires, only the time-tracking features stop; the board keeps working.

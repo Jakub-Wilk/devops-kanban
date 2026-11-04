@@ -234,3 +234,12 @@ fn type_colors_from_ado() {
     assert_eq!(colors["Epic"], "e06c00");
     assert_eq!(colors["User Story"], "0098c7");
 }
+
+#[test]
+fn assignee_keeps_avatar_descriptor() {
+    let cards = cards();
+    let ada = cards[&111354].assigned_to.as_ref().unwrap();
+    assert_eq!(ada.descriptor.as_deref(), Some("aad.QWRhIExvdmVsYWNl"));
+    let grace = cards[&118254].assigned_to.as_ref().unwrap();
+    assert_eq!(grace.descriptor, None);
+}

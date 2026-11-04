@@ -1,11 +1,12 @@
-//! Small building blocks shared by the tabs: icons, state pills, priority badges, avatars,
-//! the "assign to me" disc and dates.
+//! Small building blocks shared by the tabs: icons, state pills, priority badges, avatars (ADO
+//! profile pictures over initials), the "assign to me" disc and dates.
 
 use dioxus::prelude::*;
 use kanban_core::card::Person;
 use kanban_core::{CardId, StateCategory};
 use time::Date;
 
+use crate::components::avatars::avatar_src;
 use crate::components::icons;
 use crate::services;
 use crate::state::use_app;
@@ -57,12 +58,29 @@ pub fn Prio(priority: Option<u8>) -> Element {
     }
 }
 
+/// The person's ADO profile picture over their initials, which stay when there is no picture.
 #[component]
 pub fn Avatar(person: Person, #[props(default)] large: bool) -> Element {
+    // The descriptor whose image failed to load.
+    let mut failed = use_signal(|| None::<String>);
     let initials = person.initials();
     let class = if large { "av lg" } else { "av" };
+    let src = person
+        .descriptor
+        .clone()
+        .filter(|d| failed.read().as_ref() != Some(d));
     rsx! {
-        span { class: "{class}", "data-tip": "{person.display_name}", aria_label: "Assigned to {person.display_name}", "{initials}" }
+        span { class: "{class}", "data-tip": "{person.display_name}", aria_label: "Assigned to {person.display_name}",
+            "{initials}"
+            if let Some(d) = src {
+                img {
+                    src: avatar_src(&d),
+                    alt: "",
+                    draggable: "false",
+                    onerror: move |_| failed.set(Some(d.clone())),
+                }
+            }
+        }
     }
 }
 

@@ -1,6 +1,7 @@
 //! Reusable UI components: badges and pills, the filter bar, the three board tabs (epic list,
 //! kanban, timeline), the item dialog, toasts and the tooltip.
 
+pub mod avatars;
 pub mod epic_list;
 pub mod filters;
 pub mod icons;

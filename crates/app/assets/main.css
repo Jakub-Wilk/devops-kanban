@@ -80,7 +80,10 @@ input::placeholder { color: var(--placeholder); }
 .primary:active { transform: scale(.97); }
 .primary:disabled { opacity: .45; filter: none; transform: none; }
 
-.av { width: 28px; height: 28px; border-radius: 50%; background: #2E3644; color: var(--text); font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex: none; letter-spacing: .02em; }
+.av { position: relative; overflow: hidden; width: 28px; height: 28px; border-radius: 50%; background: #3A4456; color: var(--text); font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex: none; letter-spacing: .02em; }
+.av img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: 50%; pointer-events: none; }
+/* Same edge on photos and initials, so a flat initials circle reads as big as a photo. */
+.av::after { content: ''; position: absolute; inset: 0; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .14); pointer-events: none; }
 .av.lg { width: 36px; height: 36px; font-size: 12px; }
 
 .pagehead { background: var(--surface); border-bottom: 1px solid var(--line); flex: none; }
@@ -141,7 +144,7 @@ main.panel { padding-top: 24px; padding-bottom: 48px; display: flex; flex-direct
 .date.late .ico { color: var(--warn); }
 
 .assign { position: relative; display: inline-flex; align-items: center; justify-content: center; flex: none; width: 40px; height: 40px; margin: -6px; padding: 0; background: none; border: 0; border-radius: 50%; }
-.assign .disc { width: 28px; height: 28px; border-radius: 50%; border: 1.5px dashed #7B879A; color: var(--text-2); display: flex; align-items: center; justify-content: center; transition: background .15s, color .15s, border-color .15s, transform .2s var(--spring); }
+.assign .disc { width: 28px; height: 28px; border-radius: 50%; border: 1.5px dashed #9AA4B2; background: rgba(255, 255, 255, .04); color: var(--text-2); display: flex; align-items: center; justify-content: center; transition: background .15s, color .15s, border-color .15s, transform .2s var(--spring); }
 .assign:hover .disc, .assign:focus-visible .disc { background: var(--focus); border: 1.5px solid var(--focus); color: var(--accent-ink); transform: scale(1.08); }
 .assign:focus-visible { outline: 2px solid var(--focus); outline-offset: 0; }
 /* the one tooltip (components/tooltip.rs): any element with data-tip */

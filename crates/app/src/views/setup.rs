@@ -65,7 +65,7 @@ fn Connect() -> Element {
                 });
             },
             h2 { "Connect to Azure DevOps" }
-            p { "Create a personal access token in Azure DevOps (User settings → Personal access tokens) with the Work Items: Read & write scope. It is stored in your OS keyring, never in a file." }
+            p { "Create a personal access token in Azure DevOps (User settings → Personal access tokens) with the Work Items: Read & write scope (add Graph: Read to see profile pictures). It is stored in your OS keyring, never in a file." }
             label { class: "f",
                 span { class: "lbl", "Organization" }
                 input { class: "field", r#type: "text", placeholder: "media-press", value: "{org}", oninput: move |e| org.set(e.value()) }

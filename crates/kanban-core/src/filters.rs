@@ -186,6 +186,7 @@ mod tests {
             assigned_to: assignee.map(|u| Person {
                 display_name: u.into(),
                 unique_name: u.into(),
+                ..Person::default()
             }),
             iteration_path: iteration.into(),
             state: "Active".into(),
@@ -198,6 +199,7 @@ mod tests {
         let me = Person {
             display_name: "Me".into(),
             unique_name: "me@x".into(),
+            ..Person::default()
         };
         let mine = card(Some("me@x"), "P");
         let theirs = card(Some("os@x"), "P");

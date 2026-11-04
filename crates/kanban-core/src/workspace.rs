@@ -190,6 +190,7 @@ impl Workspace {
                 Some(Person {
                     display_name: u.display_name(),
                     unique_name: u.account()?,
+                    descriptor: u.subject_descriptor.clone(),
                 })
             }),
             type_colors: types

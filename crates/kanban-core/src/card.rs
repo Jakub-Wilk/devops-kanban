@@ -35,11 +35,15 @@ pub mod fields {
 }
 
 /// Someone a card can be assigned to.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Person {
     pub display_name: String,
     /// What `System.AssignedTo` accepts on write (usually the e-mail).
     pub unique_name: String,
+    /// Graph subject descriptor (`aad.…`), which keys the avatar. `None` for identities ADO
+    /// returns without one.
+    #[serde(default)]
+    pub descriptor: Option<String>,
 }
 
 impl Person {
@@ -66,6 +70,7 @@ impl From<&IdentityRef> for Person {
                 .unique_name
                 .clone()
                 .unwrap_or_else(|| i.display_name.clone()),
+            descriptor: i.descriptor.clone(),
         }
     }
 }
@@ -250,7 +255,7 @@ mod tests {
     fn initials() {
         let p = |n: &str| Person {
             display_name: n.into(),
-            unique_name: String::new(),
+            ..Person::default()
         };
         assert_eq!(p("Ada Lovelace").initials(), "AL");
         assert_eq!(p("Grace Brewster Hopper").initials(), "GH");
