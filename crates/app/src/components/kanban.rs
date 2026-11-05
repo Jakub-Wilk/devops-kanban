@@ -34,51 +34,40 @@ use crate::state::{AppState, Drag, DropSlot, NewInColumn, use_app};
 /// "Open cards on hover": a hovered card opens at once and closes this long after the mouse leaves.
 const HOVER_CLOSE: std::time::Duration = std::time::Duration::from_millis(50);
 
-/// Remembers the last column the mouse was over as the board's `data-hc` (cells carry
-/// `data-kc`), cleared when the mouse leaves the board or reaches the done column (an empty
-/// `data-kc`: neutral ground, equal widths). Plain `:hover` would drop to
-/// "no column" in every gap (between header rows, between columns, over a lane header) and
-/// make the widths jump back and forth. Set in the DOM directly, so hovering never re-renders.
+/// "Widen the hovered column". Remembers the last column the mouse was over as the board's
+/// `data-hc` (cells carry `data-kc`) and widens it through the board's `--tpl`; cleared when the mouse leaves the board or reaches the done column (an empty
+/// `data-kc`: neutral ground, equal widths). Plain `:hover` would drop to "no column" in every
+/// gap (between header rows, between columns, over a lane header) and make the widths jump.
+/// Set in the DOM directly, so hovering never re-renders.
+///
+/// Attaches to the board element once (it marks itself); safe to run again at any time, so
+/// [`attach_hover_tracking`] runs it whenever the board may be new or the setting changed.
 const TRACK_HOVER_JS: &str = r#"
 const el = document.getElementById('kanban-board');
 if (!el || el.dataset.hoverWired) return;
 el.dataset.hoverWired = '1';
+// The hovered column takes 1.8 shares, the others 1 (the board keeps its width). Written as
+// the board's --tpl, which main.css uses while the board has the `dyn` class.
+const widen = (i) => {
+  const n = el.querySelectorAll('.board.heads > .colhead').length;
+  const tracks = [];
+  for (let k = 0; k < n; k++) tracks.push(k === i ? 'minmax(0, 1.8fr)' : 'minmax(0, 1fr)');
+  el.style.setProperty('--tpl', tracks.join(' '));
+};
+const reset = () => { delete el.dataset.hc; el.style.removeProperty('--tpl'); };
 el.addEventListener('mouseover', (e) => {
-  const c = e.target.closest('[data-kc]');
+  const c = e.target.closest ? e.target.closest('[data-kc]') : null;
   if (!c) return;
-  if (c.dataset.kc === '') delete el.dataset.hc;
-  else if (el.dataset.hc !== c.dataset.kc) el.dataset.hc = c.dataset.kc;
+  if (c.dataset.kc === '') { if (el.dataset.hc !== undefined) reset(); }
+  else if (el.dataset.hc !== c.dataset.kc) { el.dataset.hc = c.dataset.kc; widen(Number(c.dataset.kc)); }
 });
-el.addEventListener('mouseleave', () => { delete el.dataset.hc; });
+el.addEventListener('mouseleave', reset);
 "#;
 
-/// "Widen the hovered column": every column shares the width, and the hovered one
-/// (`data-hc`, see [`TRACK_HOVER_JS`]) takes a bigger share, so the board's total width stays
-/// the same.
-fn dynamic_css(n: usize) -> String {
-    let template = |wide: Option<usize>| {
-        (0..n)
-            .map(|i| {
-                if Some(i) == wide {
-                    "minmax(0, 1.8fr)"
-                } else {
-                    "minmax(0, 1fr)"
-                }
-            })
-            .collect::<Vec<_>>()
-            .join(" ")
-    };
-    let mut css = format!(
-        ".board-scroll.dyn .board {{ grid-template-columns: {}; }}\n",
-        template(None)
-    );
-    for i in 0..n {
-        css.push_str(&format!(
-            ".board-scroll.dyn[data-hc=\"{i}\"] .board {{ grid-template-columns: {}; }}\n",
-            template(Some(i))
-        ));
-    }
-    css
+/// (Re)attaches the hovered-column tracking to the kanban board, if one is shown. Called when
+/// the board mounts, after "Widen the hovered column" changes, and when View options closes.
+pub fn attach_hover_tracking() {
+    let _ = document::eval(TRACK_HOVER_JS);
 }
 
 /// Tags a collapsed card shows before "+N".
@@ -88,6 +77,14 @@ const COLLAPSED_TAGS: usize = 3;
 pub fn Kanban(board: String) -> Element {
     let st = use_app();
     let collapsed_lanes = use_signal(HashSet::<String>::new);
+    // Hooks before any early return. Effects run after the DOM is updated, so this attaches the
+    // hovered-column tracking once the (possibly new) board is there, and again whenever
+    // "Widen the hovered column" changes.
+    let widen_setting = st.settings.read().appearance.kanban.hover_widen;
+    use_effect(use_reactive!(|widen_setting| {
+        let _ = widen_setting;
+        attach_hover_tracking();
+    }));
 
     let ws_guard = st.workspace.read();
     let Some(ws) = ws_guard.as_ref() else {
@@ -213,21 +210,16 @@ pub fn Kanban(board: String) -> Element {
         vec![(None, None, None)]
     };
     let n = columns.len().max(1);
-    // Widening: the column template comes from `dynamic_css` (the hovered column widens), so
-    // only the board's width is set here.
-    let grid_style = if hover_widen {
-        format!("min-width: {}px", n * 248)
-    } else {
-        format!(
-            "grid-template-columns: repeat({n}, minmax(236px, 1fr)); min-width: {}px",
-            n * 248
-        )
-    };
-    let dyn_css = if hover_widen {
-        dynamic_css(n)
-    } else {
-        String::new()
-    };
+    // Column templates as variables on the board; main.css picks one by the `dyn` class, so
+    // turning "Widen the hovered column" on or off only toggles that class. While widening, the
+    // hover script overrides `--tpl` (see TRACK_HOVER_JS).
+    // `--tpl-eq` is spelled out per column, like the hover script's `--tpl`: a `repeat()`
+    // doesn't animate to or from a plain list, so going back to even widths would snap.
+    let board_vars = format!(
+        "--tpl-fixed: repeat({n}, minmax(236px, 1fr)); --tpl-eq: {}",
+        vec!["minmax(0, 1fr)"; n].join(" ")
+    );
+    let grid_style = format!("min-width: {}px", n * 248);
     let header_cols: Vec<ColumnHead> = columns
         .iter()
         .map(|c| column_head(ws, b, c, &visible))
@@ -360,13 +352,11 @@ pub fn Kanban(board: String) -> Element {
         if columns.is_empty() {
             div { class: "note", Icon { svg: icons::INFO } "All columns are hidden. Use the Columns menu to show some." }
         } else {
-            if hover_widen { style { "{dyn_css}" } }
             div {
                 id: "kanban-board",
                 class: if hover_widen { "board-scroll dyn" } else { "board-scroll" },
-                onmounted: move |_| {
-                    let _ = document::eval(TRACK_HOVER_JS);
-                },
+                style: "{board_vars}",
+                onmounted: move |_| attach_hover_tracking(),
                 div { class: "board heads", style: "{grid_style}",
                     for (i, (h, neutral)) in header_cols.iter().zip(closing_cols.iter().copied()).enumerate() {
                         div { key: "h-{h.id}", class: "colhead", "data-kc": if neutral { String::new() } else { i.to_string() }, style: "--i: {i}",

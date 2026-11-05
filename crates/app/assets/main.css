@@ -292,8 +292,11 @@ main.panel.fill .board-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; -
 .col { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-lg); padding: var(--s3); display: flex; flex-direction: column; gap: var(--s3); min-height: 140px; transition: border-color .2s, background .2s, box-shadow .2s; animation: fadeUp .35s var(--ease) both; animation-delay: calc(var(--i, 0) * 40ms); }
 .col.over { border-color: var(--accent); background: #121A2B; box-shadow: 0 0 0 3px rgba(120, 166, 255, .12); }
 .col.over-limit { border-color: var(--warn); }
-/* Dynamic kanban: column widths come from generated rules (see kanban.rs `dynamic_css`). */
-.board-scroll.dyn .board { transition: grid-template-columns .25s var(--ease); }
+/* Column widths: fixed-minimum columns normally; with "Widen the hovered column" (`dyn`) equal
+   shares, or the hover script's --tpl with one column wider (kanban.rs TRACK_HOVER_JS). */
+.board-scroll .board { grid-template-columns: var(--tpl-fixed); }
+.board-scroll.dyn .board { grid-template-columns: var(--tpl, var(--tpl-eq)); transition: grid-template-columns .25s var(--ease); }
+/* While widening, columns may shrink below their content. */
 .board-scroll.dyn .col, .board-scroll.dyn .colhead { min-width: 0; }
 .card .pin { width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: var(--r-sm); background: none; color: var(--faint); opacity: 0; transition: opacity .15s, color .15s, background .15s; }
 .card:hover .pin, .card:focus-within .pin, .card .pin.on { opacity: 1; }

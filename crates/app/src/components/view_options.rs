@@ -22,6 +22,11 @@ pub enum ViewTab {
 #[component]
 pub fn ViewOptions(tab: ViewTab) -> Element {
     let mut open = use_signal(|| false);
+    // Closing can follow a change that needs the kanban's hover tracking (re)attached.
+    let mut close = move || {
+        open.set(false);
+        crate::components::kanban::attach_hover_tracking();
+    };
     rsx! {
         span { class: "popover-anchor",
             button {
@@ -30,17 +35,17 @@ pub fn ViewOptions(tab: ViewTab) -> Element {
                 aria_label: "View options",
                 aria_haspopup: "dialog",
                 aria_expanded: "{open()}",
-                onclick: move |_| open.toggle(),
+                onclick: move |_| if open() { close() } else { open.set(true) },
                 Icon { svg: icons::SLIDERS }
                 "View options"
             }
             if open() {
-                div { class: "popover-backdrop", onclick: move |_| open.set(false) }
+                div { class: "popover-backdrop", onclick: move |_| close() }
                 div {
                     class: "popover left viewopts",
                     role: "dialog",
                     aria_label: "View options",
-                    onkeydown: move |e| if e.key() == Key::Escape { open.set(false) },
+                    onkeydown: move |e| if e.key() == Key::Escape { close() },
                     match tab {
                         ViewTab::List => rsx! { RowOptions { timeline: false } },
                         ViewTab::Timeline => rsx! { RowOptions { timeline: true } },
