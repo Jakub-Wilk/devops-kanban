@@ -112,6 +112,9 @@ Time tracking goes through 7pace Timetracker, a **separate service**. See [docs/
 - Every module starts with a `//!` doc comment stating its responsibility. Keep it accurate.
 - Errors: `thiserror` enums per crate. No `unwrap()`/`expect()` outside tests and `main`.
 - Logging: `tracing`. Control the level with `RUST_LOG` or the `log_level` setting.
+- Text is not selectable by default (cards, rows and markers are dragged). Fields, the card
+  description, error notes and read-only dialog details opt back in; mark anything else worth
+  copying with `.selectable` (it works inside draggable cards too, see `SELECTION_JS` in `main.rs`).
 - Dioxus: 0.7 APIs (`use_signal`, `use_resource`, `use_reactive!`). Pin `0.7`, since 0.8 is
   alpha with breaking Signals changes. For drag and drop, use HTML5 drag events and keep the dragged
   card id in a signal, not in `dataTransfer`.

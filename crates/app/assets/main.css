@@ -44,7 +44,25 @@ body {
   font-size: 14px;
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
+  /* Not selectable by default: cards, rows and markers are dragged, and selecting text on the
+     way is noise. Text worth copying opts back in below. */
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
 }
+/* Selectable: what you type into, the expanded card description, error and status text, and
+   read-only dialog details (`.selectable` for anything else). main.rs `SELECTION_JS` keeps a
+   press in these from dragging a card around them. */
+input, textarea, select, [contenteditable], .selectable, .card .card-desc, div.note, .dlg .banner, .dlg .meta, .dlg .ctx .t, .dlg .changes {
+  user-select: text;
+  -webkit-user-select: text;
+}
+div.note, .dlg .banner, .dlg .meta, .dlg .ctx .t, .dlg .changes { cursor: text; }
+/* `cursor` inherits, so fields that take text get theirs back; selects and toggles point. */
+textarea, [contenteditable], input:not([type]), input[type=text], input[type=search], input[type=password], input[type=number], input[type=email], input[type=url], input[type=date], input[type=time] { cursor: text; }
+select, input[type=checkbox], input[type=radio] { cursor: pointer; }
+/* Buttons and links inside selectable text keep their own cursor. */
+div.note button, .dlg .banner button, .dlg .meta a { cursor: pointer; }
 #main { height: 100%; }
 button, input, select { font-family: inherit; font-size: 14px; color: var(--text); }
 button { cursor: pointer; }
@@ -335,10 +353,8 @@ main.panel.fill .board-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; -
 .card .tag.more { color: var(--faint); border-style: dashed; }
 /* Description: the first line while collapsed, all of it when expanded. */
 .card .desc-line { margin: 0; font-size: var(--meta); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.card .card-desc { font-size: var(--meta); line-height: 1.5; color: var(--text-2); overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; cursor: text; }
-/* Opt-in selectable text inside draggable things; main.rs `SELECTION_JS` keeps a press in it
-   from starting a drag. */
-.selectable { user-select: text; -webkit-user-select: text; cursor: text; }
+.card .card-desc { font-size: var(--meta); line-height: 1.5; color: var(--text-2); overflow-wrap: anywhere; cursor: text; }
+.selectable { cursor: text; }
 .card .card-desc > :first-child { margin-top: 0; }
 .card .card-desc > :last-child { margin-bottom: 0; }
 .card .card-desc p, .card .card-desc div { margin: 0 0 6px; }

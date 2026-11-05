@@ -38,7 +38,7 @@ pub fn Settings() -> Element {
                     }
                     div { class: "list", style: "padding: 4px 20px",
                         div { class: "row",
-                            div { strong { "Organization" } p { "{s.organization}" } }
+                            div { strong { "Organization" } p { class: "selectable", "{s.organization}" } }
                             button {
                                 class: "ghost",
                                 r#type: "button",
@@ -154,7 +154,7 @@ fn TimeTrackingSettings() -> Element {
             div { class: "row",
                 div {
                     strong { "Track time on the kanban" }
-                    p { "Start/stop timer, add time and your time entries on each card. {status}" }
+                    p { "Start/stop timer, add time and your time entries on each card. " span { class: "selectable", "{status}" } }
                 }
                 input {
                     r#type: "checkbox",
@@ -174,7 +174,7 @@ fn TimeTrackingSettings() -> Element {
                     if let Some(m) = message() {
                         {
                             let (ok, text) = match m { Ok(s) => (true, s), Err(s) => (false, s) };
-                            rsx! { p { class: if ok { "ok" } else { "bad" }, "{text}" } }
+                            rsx! { p { class: if ok { "ok selectable" } else { "bad selectable" }, "{text}" } }
                         }
                     }
                 }
