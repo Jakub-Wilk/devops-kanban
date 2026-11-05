@@ -260,6 +260,8 @@ main.panel { padding-top: var(--s5); padding-bottom: 48px; display: flex; flex-d
 .lrow.context .etitle { color: var(--muted); }
 .lrow.context { opacity: .85; }
 .lrow .kids { flex: none; font-family: var(--mono); font-size: 11px; color: var(--faint); background: var(--chip); border-radius: 5px; padding: 0 var(--s2); line-height: 18px; }
+/* "+ Epic / Feature / User Story" above the List, styled like the rows' inline add buttons. */
+.addrow { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1); margin: calc(-1 * var(--s3)) 0 calc(-1 * var(--s2)) calc(-1 * var(--s2)); }
 .lrow .add-child { opacity: 0; flex: none; transition: opacity .15s, background .15s; }
 .lrow:hover .add-child, .lrow .add-child:focus-visible { opacity: 1; }
 .lrow .progress, .lrow .area, .lrow .iter { width: auto; }

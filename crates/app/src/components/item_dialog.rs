@@ -73,6 +73,18 @@ pub fn open_new(
     }));
 }
 
+/// "+ Feature" / "+ User Story" above the List: like [`open_new`] without a parent, with the
+/// one-off tag (when set in Settings) already checked, so the item can be saved parentless.
+pub fn open_new_top_level(mut st: AppState, work_item_type: String, area: String) {
+    open_new(st, false, work_item_type, None, area);
+    let tag = st.settings.peek().one_off_tag().map(str::to_owned);
+    if let (Some(tag), Some(d)) = (tag, st.dialog.write().as_mut()) {
+        // Both, so the preset doesn't count as an unsaved change.
+        add_tag(&mut d.form.tags, &tag);
+        add_tag(&mut d.original.tags, &tag);
+    }
+}
+
 /// "New" under a kanban column: like [`open_new`], with the column's state preset.
 pub fn open_new_in_column(
     mut st: AppState,

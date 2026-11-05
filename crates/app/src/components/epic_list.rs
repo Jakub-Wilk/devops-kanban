@@ -17,7 +17,7 @@ use kanban_core::{Card, CardId, StateCategory, Workspace};
 
 use crate::components::filters::{ItemFilters, ItemTab, update_view_prefs, view_prefs};
 use crate::components::icons;
-use crate::components::item_dialog::{open_edit, open_new};
+use crate::components::item_dialog::{open_edit, open_new, open_new_top_level};
 use crate::components::widgets::{Assignee, DateLabel, Icon, Prio, StatePill, TypeIcon};
 use crate::services;
 use crate::state::{Drag, use_app};
@@ -57,6 +57,15 @@ pub fn EpicList(search_focus: Signal<Option<std::rc::Rc<MountedData>>>) -> Eleme
         .first()
         .cloned()
         .unwrap_or_else(|| "Epic".into());
+    // "+ <type>" buttons: the top level, then each kanban level's default type, top-down.
+    let new_types: Vec<(String, bool)> = std::iter::once((root_type.clone(), true))
+        .chain(ws.kanban_levels().iter().filter_map(|l| {
+            l.default_type
+                .clone()
+                .or_else(|| l.work_item_types.first().cloned())
+                .map(|t| (t, false))
+        }))
+        .collect();
     let q = query.read().trim().to_lowercase();
     let view = view_prefs(st, ws);
     let matches_text = |c: &Card| {
@@ -178,16 +187,28 @@ pub fn EpicList(search_focus: Signal<Option<std::rc::Rc<MountedData>>>) -> Eleme
                     }
                 }
             }
-            button {
-                class: "primary",
-                r#type: "button",
-                onclick: {
-                    let root_type = root_type.clone();
-                    let area = default_area.clone();
-                    move |_| open_new(st, true, root_type.clone(), None, area.clone())
-                },
-                Icon { svg: icons::PLUS }
-                "New {root_type.to_lowercase()}"
+        }
+        div { class: "addrow", role: "group", aria_label: "New work item",
+            for (t, is_root) in new_types {
+                button {
+                    key: "{t}",
+                    class: "link sm",
+                    r#type: "button",
+                    "data-tip": "New {t.to_lowercase()}",
+                    onclick: {
+                        let t = t.clone();
+                        let area = default_area.clone();
+                        move |_| {
+                            if is_root {
+                                open_new(st, true, t.clone(), None, area.clone());
+                            } else {
+                                open_new_top_level(st, t.clone(), area.clone());
+                            }
+                        }
+                    },
+                    Icon { svg: icons::PLUS_14 }
+                    "{t}"
+                }
             }
         }
 
