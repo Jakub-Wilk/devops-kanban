@@ -1,5 +1,5 @@
-//! Small building blocks shared by the tabs: icons, state pills, priority badges, avatars (ADO
-//! profile pictures over initials), the "assign to me" disc and dates.
+//! Small building blocks shared by the tabs: icons, state pills, priority badges, work item type
+//! icons, avatars (ADO profile pictures over initials), the "assign to me" disc and dates.
 
 use dioxus::prelude::*;
 use kanban_core::card::Person;
@@ -40,25 +40,23 @@ pub fn StatePill(state: String, category: StateCategory, color: String) -> Eleme
     }
 }
 
+/// Priority as four bars: P1 lights all four, P4 one; no priority shows four outlines. The
+/// number stays in the tooltip and the accessible name.
 #[component]
 pub fn Prio(priority: Option<u8>) -> Element {
-    let p = priority.unwrap_or(0);
-    let label = if p == 0 {
-        "–".to_owned()
-    } else {
-        format!("P{p}")
-    };
+    let p = priority.unwrap_or(0).min(4);
     let title = if p == 0 {
         "No priority".to_owned()
     } else {
         format!("Priority {p}")
     };
     rsx! {
-        span { class: "prio p{p}", "data-tip": "{title}", "{label}" }
+        span { class: "prio p{p}", role: "img", aria_label: "{title}", "data-tip": "{title}",
+            b {} b {} b {} b {}
+        }
     }
 }
 
-/// The person's ADO profile picture over their initials, which stay when there is no picture.
 #[component]
 pub fn Avatar(
     person: Person,
@@ -135,19 +133,40 @@ pub fn short_date(d: Date) -> String {
     }
 }
 
+/// Target date. When it is past and the item is still open, it turns amber and says how late
+/// it is ("2 days late"), so the warning doesn't rely on colour.
 #[component]
 pub fn DateLabel(date: Option<Date>, #[props(default)] open: bool) -> Element {
     let Some(d) = date else {
         return rsx! {};
     };
-    let late = open && d < today();
+    let days_late = (today() - d).whole_days();
+    let late = open && days_late > 0;
     let class = if late { "date late" } else { "date" };
     let text = short_date(d);
+    let late_text = match days_late {
+        1 => "1 day late".to_owned(),
+        n => format!("{n} days late"),
+    };
     rsx! {
         span { class: "{class}", "data-tip": if late { "Overdue" } else { "Target date" },
             Icon { svg: icons::CALENDAR }
             span { class: "sr-only", "Target date: " }
             "{text}"
+            if late { span { class: "late-by", "· {late_text}" } }
+        }
+    }
+}
+
+/// A work item type's icon in its colour. `icon` is the ADO icon id (`icon_book`, …); unknown or
+/// missing ids show a coloured dot. `color` is the type colour without `#`.
+#[component]
+pub fn TypeIcon(icon: Option<String>, color: String, label: String) -> Element {
+    let svg = icon.as_deref().and_then(icons::type_icon);
+    let class = if svg.is_some() { "ty" } else { "ty dot" };
+    rsx! {
+        span { class: "{class}", style: "--tc: #{color}", role: "img", aria_label: "{label}", "data-tip": "{label}",
+            if let Some(svg) = svg { span { class: "ico", dangerous_inner_html: svg } }
         }
     }
 }

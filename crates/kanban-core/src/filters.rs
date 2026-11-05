@@ -1,9 +1,12 @@
 //! Filters of the board screen: the shared iteration, and each tab's own assignees (`@me`,
 //! `@unassigned` or a `unique_name`), area paths, epic states and work item states, as saved in
 //! [`TabFilters`] and [`crate::BoardPrefs`]. Also which states the kanban shows, for the status
-//! filter's options.
+//! filter's options. And the List's tree: every level from the root down to tasks, with the
+//! ancestors of matching items kept as context.
 
 use crate::board::Board;
+use std::collections::{HashMap, HashSet};
+
 use crate::card::{Card, CardId, Person};
 use crate::config::{BoardPrefs, Settings, TabFilters};
 use crate::hierarchy::Hierarchy;
@@ -112,6 +115,186 @@ pub fn epic_rows<'a>(
         .collect()
 }
 
+/// The one person every card is assigned to, if there is exactly one. `None` when there are no
+/// cards, any card is unassigned, or two people appear. The kanban's WIP meter only makes sense
+/// for one person's cards.
+pub fn single_assignee<'a>(cards: impl IntoIterator<Item = &'a Card>) -> Option<String> {
+    let mut who: Option<&str> = None;
+    for c in cards {
+        let u = c.assigned_to.as_ref()?.unique_name.as_str();
+        match who {
+            None => who = Some(u),
+            Some(w) if w != u => return None,
+            Some(_) => {}
+        }
+    }
+    who.map(str::to_owned)
+}
+
+/// The kanban is filtered to exactly one person (a single assignee token other than
+/// `@unassigned`), so the WIP meter applies even to a column with none of their cards.
+pub fn filtered_to_one_person(prefs: &BoardPrefs) -> bool {
+    matches!(prefs.assignees.as_slice(), [t] if t != UNASSIGNED)
+}
+
+/// One row of the List's tree.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ListRow {
+    pub id: CardId,
+    /// Indentation: 0 for roots, +1 per parent.
+    pub depth: u8,
+    pub parent: Option<CardId>,
+    /// Index of the row's backlog level in [`list_levels`] (0 = roots). Drives "Expand down to".
+    pub rank: usize,
+    /// The next row is one of its children (decides the twirl).
+    pub has_children: bool,
+    /// Shown only because something below it matches the filters.
+    pub context: bool,
+    pub task: bool,
+}
+
+/// The List's levels, top down: the root portfolio level, the levels below it, then tasks.
+/// Each is (name, work item types). Names come from the team's backlog configuration.
+pub fn list_levels(ws: &Workspace) -> Vec<(String, Vec<String>)> {
+    let start = ws.levels.iter().position(|l| l.is_portfolio).unwrap_or(0);
+    let mut out: Vec<(String, Vec<String>)> = ws.levels[start.min(ws.levels.len())..]
+        .iter()
+        .map(|l| (l.name.clone(), l.work_item_types.clone()))
+        .collect();
+    if !ws.task_types.is_empty() {
+        out.push(("Tasks".into(), ws.task_types.clone()));
+    }
+    out
+}
+
+/// The List as a flat tree: each epic from [`epic_rows`], then its descendants depth-first, each
+/// followed by its tasks. Descendants that don't match the filters still show (as `context`)
+/// when something below them does.
+pub fn list_rows(
+    ws: &Workspace,
+    hierarchy: &Hierarchy,
+    prefs: &TabFilters,
+    iteration: Option<&str>,
+    text: impl Fn(&Card) -> bool,
+) -> Vec<ListRow> {
+    let matched: Vec<(CardId, Vec<CardId>)> = epic_rows(ws, hierarchy, prefs, iteration, text)
+        .into_iter()
+        .map(|(e, kids)| (e.id, kids.into_iter().map(|(c, _)| c.id).collect()))
+        .collect();
+    let levels = list_levels(ws);
+    let rank = |c: &Card| {
+        levels
+            .iter()
+            .position(|(_, types)| types.contains(&c.work_item_type))
+            .unwrap_or(levels.len().saturating_sub(1))
+    };
+    tree_rows(&ws.cards, hierarchy, &matched, &ws.task_types, rank)
+}
+
+/// [`list_rows`] without the filtering: `matched` is each root with its matching descendants.
+pub fn tree_rows(
+    cards: &HashMap<CardId, Card>,
+    hierarchy: &Hierarchy,
+    matched: &[(CardId, Vec<CardId>)],
+    task_types: &[String],
+    rank: impl Fn(&Card) -> usize,
+) -> Vec<ListRow> {
+    let mut out: Vec<ListRow> = Vec::new();
+    let push_tasks = |out: &mut Vec<ListRow>, parent: CardId, depth: u8| {
+        for t in hierarchy.tasks.get(&parent).into_iter().flatten() {
+            if let Some(c) = cards.get(t) {
+                out.push(ListRow {
+                    id: *t,
+                    depth: depth.saturating_add(1),
+                    parent: Some(parent),
+                    rank: rank(c),
+                    has_children: false,
+                    context: false,
+                    task: true,
+                });
+            }
+        }
+    };
+    for (root, kids) in matched {
+        let Some(root_card) = cards.get(root) else {
+            continue;
+        };
+        let hits: HashSet<CardId> = kids.iter().copied().collect();
+        // Every ancestor of a hit, up to the root, stays as context.
+        let mut keep = hits.clone();
+        for id in kids {
+            let mut p = cards.get(id).and_then(|c| c.parent);
+            while let Some(pid) = p {
+                if pid == *root || !keep.insert(pid) {
+                    break;
+                }
+                p = cards.get(&pid).and_then(|c| c.parent);
+            }
+        }
+        out.push(ListRow {
+            id: *root,
+            depth: 0,
+            parent: None,
+            rank: rank(root_card),
+            has_children: false,
+            context: false,
+            task: false,
+        });
+        push_tasks(&mut out, *root, 0);
+        for (id, depth) in hierarchy.children.get(root).into_iter().flatten() {
+            if !keep.contains(id) {
+                continue;
+            }
+            let Some(c) = cards.get(id) else { continue };
+            let context = !hits.contains(id);
+            out.push(ListRow {
+                id: *id,
+                depth: *depth,
+                parent: c.parent,
+                rank: rank(c),
+                has_children: false,
+                context,
+                task: task_types.contains(&c.work_item_type),
+            });
+            if !context {
+                push_tasks(&mut out, *id, *depth);
+            }
+        }
+    }
+    for i in 0..out.len().saturating_sub(1) {
+        out[i].has_children = out[i + 1].depth > out[i].depth;
+    }
+    out
+}
+
+/// Re-orders `rows` within each parent by `key` (stable, so ties keep backlog order), keeping
+/// every subtree under its row.
+pub fn sort_siblings<K: Ord>(rows: Vec<ListRow>, key: impl Fn(&ListRow) -> K) -> Vec<ListRow> {
+    // Split a run of rows into subtrees that start at `depth`.
+    fn split(rows: &[ListRow]) -> Vec<&[ListRow]> {
+        let mut out = Vec::new();
+        let mut start = 0;
+        for i in 1..=rows.len() {
+            if i == rows.len() || rows[i].depth <= rows[start].depth {
+                out.push(&rows[start..i]);
+                start = i;
+            }
+        }
+        out
+    }
+    fn sort<K: Ord>(rows: &[ListRow], key: &impl Fn(&ListRow) -> K, out: &mut Vec<ListRow>) {
+        let mut trees = split(rows);
+        trees.sort_by_key(|t| key(&t[0]));
+        for t in trees {
+            out.push(t[0]);
+            sort(&t[1..], key, out);
+        }
+    }
+    let mut out = Vec::with_capacity(rows.len());
+    sort(&rows, &key, &mut out);
+    out
+}
+
 /// Work items (not roots) for the timeline. With an epic state filter, items without an epic
 /// are left out. Tasks whose parent is loaded are left out too: they follow their parent (see
 /// [`Hierarchy::tasks`]) rather than being filtered themselves.
@@ -194,6 +377,108 @@ mod tests {
             state: "Active".into(),
             ..Card::default()
         }
+    }
+
+    fn node(id: CardId, parent: Option<CardId>, ty: &str, order: f64) -> (CardId, Card) {
+        (
+            id,
+            Card {
+                id,
+                parent,
+                work_item_type: ty.into(),
+                order: Some(order),
+                ..Card::default()
+            },
+        )
+    }
+
+    /// Epic 1 › Feature 2 › Story 3 › Task 5, and Story 4 directly under the epic.
+    fn tree() -> (HashMap<CardId, Card>, Hierarchy) {
+        let cards: HashMap<CardId, Card> = [
+            node(1, None, "Epic", 1.0),
+            node(2, Some(1), "Feature", 1.0),
+            node(3, Some(2), "User Story", 1.0),
+            node(4, Some(1), "User Story", 2.0),
+            node(5, Some(3), "Task", 1.0),
+        ]
+        .into_iter()
+        .collect();
+        let h = Hierarchy::build(&cards, &["Epic".into()], &["Task".into()]);
+        (cards, h)
+    }
+
+    fn rank(c: &Card) -> usize {
+        ["Epic", "Feature", "User Story", "Task"]
+            .iter()
+            .position(|t| *t == c.work_item_type)
+            .unwrap_or(3)
+    }
+
+    #[test]
+    fn tree_rows_order_depth_and_children() {
+        let (cards, h) = tree();
+        let rows = tree_rows(&cards, &h, &[(1, vec![2, 3, 4])], &["Task".into()], rank);
+        let got: Vec<(CardId, u8, usize, bool, bool)> = rows
+            .iter()
+            .map(|r| (r.id, r.depth, r.rank, r.has_children, r.task))
+            .collect();
+        assert_eq!(
+            got,
+            vec![
+                (1, 0, 0, true, false),
+                (2, 1, 1, true, false),
+                (3, 2, 2, true, false),
+                (5, 3, 3, false, true),
+                (4, 1, 2, false, false),
+            ]
+        );
+        assert_eq!(rows[3].parent, Some(3));
+        assert!(rows.iter().all(|r| !r.context));
+    }
+
+    #[test]
+    fn tree_rows_keep_ancestors_as_context() {
+        let (cards, h) = tree();
+        // Only the deep story matches: its feature stays as context, the other story goes.
+        let rows = tree_rows(&cards, &h, &[(1, vec![3])], &["Task".into()], rank);
+        let got: Vec<(CardId, bool)> = rows.iter().map(|r| (r.id, r.context)).collect();
+        assert_eq!(got, vec![(1, false), (2, true), (3, false), (5, false)]);
+    }
+
+    #[test]
+    fn sort_siblings_keeps_subtrees() {
+        let (cards, h) = tree();
+        let rows = tree_rows(&cards, &h, &[(1, vec![2, 3, 4])], &["Task".into()], rank);
+        // Reverse by id: story 4 moves above feature 2, which keeps story 3 and task 5 below it.
+        let sorted = sort_siblings(rows, |r| std::cmp::Reverse(r.id));
+        let ids: Vec<CardId> = sorted.iter().map(|r| r.id).collect();
+        assert_eq!(ids, vec![1, 4, 2, 3, 5]);
+    }
+
+    #[test]
+    fn single_assignee_needs_exactly_one_person() {
+        let a = card(Some("a@x"), "P");
+        let a2 = card(Some("a@x"), "P");
+        let b = card(Some("b@x"), "P");
+        let nobody = card(None, "P");
+        assert_eq!(single_assignee([&a, &a2]), Some("a@x".into()));
+        assert_eq!(single_assignee([&a, &b]), None);
+        assert_eq!(single_assignee([&a, &nobody]), None);
+        assert_eq!(single_assignee([&nobody]), None);
+        assert_eq!(single_assignee(std::iter::empty::<&Card>()), None);
+    }
+
+    #[test]
+    fn one_person_filter() {
+        let prefs = |t: &[&str]| BoardPrefs {
+            assignees: t.iter().map(|s| s.to_string()).collect(),
+            ..BoardPrefs::default()
+        };
+        assert!(filtered_to_one_person(&prefs(&[ME])));
+        assert!(filtered_to_one_person(&prefs(&["a@x"])));
+        assert!(!filtered_to_one_person(&prefs(&[UNASSIGNED])));
+        assert!(!filtered_to_one_person(&prefs(&[ME, "a@x"])));
+        assert!(!filtered_to_one_person(&prefs(&[])));
     }
 
     #[test]

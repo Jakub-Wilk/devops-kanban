@@ -1,4 +1,5 @@
-//! Toast stack (bottom right): move warnings, conflicts, ADO errors verbatim.
+//! Toast stack (bottom right): moves (with "Move back"), move warnings, conflicts, ADO errors
+//! verbatim.
 
 use dioxus::prelude::*;
 
@@ -22,6 +23,18 @@ pub fn Toasts() -> Element {
                     },
                     Icon { svg: if t.kind == ToastKind::Info { icons::INFO } else { icons::ALERT } }
                     span { "{t.text}" }
+                    if let Some(m) = t.move_back.clone() {
+                        button {
+                            class: "move-back",
+                            r#type: "button",
+                            "data-tip": "Moves it back as a new change; Azure DevOps keeps both in the history",
+                            onclick: move |_| {
+                                st.toasts.write().retain(|x| x.id != t.id);
+                                crate::services::move_back(st, m.clone());
+                            },
+                            "Move back"
+                        }
+                    }
                     button {
                         r#type: "button",
                         aria_label: "Dismiss",

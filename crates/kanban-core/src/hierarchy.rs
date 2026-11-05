@@ -1,4 +1,5 @@
-//! Epic → Feature → Story tree for the epic list, built from `System.Parent`.
+//! Epic → Feature → Story tree for the epic list, built from `System.Parent`. Progress is
+//! available for roots and for any item below them.
 //!
 //! Stories may hang directly off an epic or off one of its features; both appear as the epic's
 //! children (features first in order, each followed by its stories). Tasks are not children:
@@ -110,6 +111,37 @@ impl Hierarchy {
             .filter(|c| states.category(&c.work_item_type, &c.state).is_done())
             .count();
         (done, total)
+    }
+}
+
+impl Hierarchy {
+    /// (done, total) over any item's descendants (tasks excluded), like [`Self::progress`].
+    pub fn progress_of(
+        &self,
+        id: CardId,
+        cards: &HashMap<CardId, Card>,
+        states: &StateMap,
+    ) -> (usize, usize) {
+        if self.roots.contains(&id) {
+            return self.progress(id, cards, states);
+        }
+        let Some(list) = self.root_of.get(&id).and_then(|r| self.children.get(r)) else {
+            return (0, 0);
+        };
+        let Some(pos) = list.iter().position(|(x, _)| *x == id) else {
+            return (0, 0);
+        };
+        let depth = list[pos].1;
+        let below: Vec<&Card> = list[pos + 1..]
+            .iter()
+            .take_while(|(_, d)| *d > depth)
+            .filter_map(|(x, _)| cards.get(x))
+            .collect();
+        let done = below
+            .iter()
+            .filter(|c| states.category(&c.work_item_type, &c.state).is_done())
+            .count();
+        (done, below.len())
     }
 }
 

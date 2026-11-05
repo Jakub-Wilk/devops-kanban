@@ -27,7 +27,7 @@ use state::AppState;
 /// Embedded rather than `asset!`: without `dx`, Dioxus looks for assets next to the
 /// executable, so a plain `cargo run` would start unstyled.
 const MAIN_CSS: &str = include_str!("../assets/main.css");
-const FONTS: &str = "https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&family=IBM+Plex+Sans:wght@400;500;600&display=swap";
+const FONTS: &str = "https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&family=Inter:wght@400;500;600;700&display=swap";
 
 fn main() {
     let settings = Settings::load().unwrap_or_else(|e| {
@@ -42,6 +42,7 @@ fn main() {
     // `with_window`.
     let window = WindowBuilder::new()
         .with_title("Board Buddy")
+        .with_maximized(settings.window_maximized)
         .with_window_icon(app_icon::icon())
         .with_inner_size(LogicalSize::new(1440.0, 980.0))
         .with_min_inner_size(LogicalSize::new(960.0, 640.0));
@@ -84,5 +85,31 @@ fn App() -> Element {
         TooltipLayer {}
         AvatarServer {}
         TimeKeeper {}
+        WindowKeeper {}
     }
+}
+
+/// Remembers whether the window is maximised, so the next launch opens the same way. Saved when
+/// it changes (maximising and restoring both resize the window), ignoring minimised states.
+#[component]
+fn WindowKeeper() -> Element {
+    let mut st = use_context::<AppState>();
+    dioxus::desktop::use_wry_event_handler(move |event, _| {
+        if let dioxus::desktop::tao::event::Event::WindowEvent {
+            event: dioxus::desktop::WindowEvent::Resized(_),
+            ..
+        } = event
+        {
+            let window = dioxus::desktop::window();
+            if window.is_minimized() {
+                return;
+            }
+            let maximized = window.is_maximized();
+            if st.settings.peek().window_maximized != maximized {
+                st.settings.write().window_maximized = maximized;
+                services::save_settings(st);
+            }
+        }
+    });
+    rsx! {}
 }

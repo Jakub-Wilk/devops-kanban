@@ -51,8 +51,13 @@ icon!(
 );
 icon!(PLUS, "16", "2.4", "<path d=\"M12 5v14M5 12h14\"/>");
 icon!(PLUS_14, "14", "2.4", "<path d=\"M12 5v14M5 12h14\"/>");
-icon!(MINUS, "16", "2.4", "<path d=\"M5 12h14\"/>");
 icon!(CHECK, "22", "2.2", "<path d=\"M5 12.5l4.5 4.5L19 7.5\"/>");
+icon!(
+    CHECK_14,
+    "14",
+    "2.4",
+    "<path d=\"M5 12.5l4.5 4.5L19 7.5\"/>"
+);
 icon!(PLAY, "14", "2.2", "<path d=\"M7 4.5v15l12.5-7.5z\"/>");
 icon!(
     STOP,
@@ -65,12 +70,6 @@ icon!(
     "14",
     "2",
     "<circle cx=\"11\" cy=\"13\" r=\"8\"/><path d=\"M11 9v4l2.5 2.5M19 2v5M16.5 4.5h5\"/>"
-);
-icon!(
-    FOLDER,
-    "14",
-    "2",
-    "<path d=\"M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z\"/>"
 );
 icon!(
     ASSIGN,
@@ -116,3 +115,85 @@ icon!(
     "<path d=\"M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z\"/><path d=\"M12 9v4M12 17h.01\"/>"
 );
 icon!(BACK, "16", "2", "<path d=\"M15 18l-6-6 6-6\"/>");
+icon!(
+    CLOCK,
+    "14",
+    "2",
+    "<circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M12 7v5l3 2\"/>"
+);
+icon!(ARROW_UP, "12", "2.4", "<path d=\"M12 19V5M6 11l6-6 6 6\"/>");
+
+// Work item type icons, keyed by the icon id Azure DevOps reports for each type
+// (`wit/workitemtypes` → `icon.id`). Never by type name: processes rename and add types.
+icon!(
+    TY_CROWN,
+    "12",
+    "2.2",
+    "<path d=\"M3 18h18M4 8l4 4 4-7 4 7 4-4-2 10H6z\"/>"
+);
+icon!(
+    TY_TROPHY,
+    "12",
+    "2.2",
+    "<path d=\"M8 4h8v5a4 4 0 0 1-8 0zM8 6H5v1a3 3 0 0 0 3 3M16 6h3v1a3 3 0 0 1-3 3M12 13v4M8 20h8\"/>"
+);
+icon!(
+    TY_BOOK,
+    "12",
+    "2.2",
+    "<path d=\"M5 5a2 2 0 0 1 2-2h11v16H7a2 2 0 0 0-2 2zM5 21a2 2 0 0 1 2-2h11\"/>"
+);
+icon!(
+    TY_CLIPBOARD,
+    "12",
+    "2.2",
+    "<rect x=\"5\" y=\"4\" width=\"14\" height=\"17\" rx=\"2\"/><path d=\"M9 4V3h6v1M9 11h6M9 15h4\"/>"
+);
+icon!(
+    TY_INSECT,
+    "12",
+    "2.2",
+    "<path d=\"M9 8a3 3 0 0 1 6 0M8 8h8v6a4 4 0 0 1-8 0zM4 7l3 2M20 7l-3 2M3 14h5M16 14h5M5 20l3-2M19 20l-3-2\"/>"
+);
+icon!(
+    TY_LIST,
+    "12",
+    "2.2",
+    "<path d=\"M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01\"/>"
+);
+icon!(
+    TY_CHECK_BOX,
+    "12",
+    "2.2",
+    "<rect x=\"4\" y=\"4\" width=\"16\" height=\"16\" rx=\"3\"/><path d=\"M8.5 12l2.5 2.5 4.5-5\"/>"
+);
+icon!(
+    TY_TRAFFIC_CONE,
+    "12",
+    "2.2",
+    "<path d=\"M10 3h4l5 16H5zM7.5 11h9M4 21h16\"/>"
+);
+icon!(TY_DIAMOND, "12", "2.2", "<path d=\"M12 3l9 9-9 9-9-9z\"/>");
+icon!(
+    TY_STAR,
+    "12",
+    "2.2",
+    "<path d=\"M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z\"/>"
+);
+
+/// The SVG for an ADO work item type icon id, if we have one.
+pub fn type_icon(ado_icon_id: &str) -> Option<&'static str> {
+    Some(match ado_icon_id {
+        "icon_crown" => TY_CROWN,
+        "icon_trophy" => TY_TROPHY,
+        "icon_book" => TY_BOOK,
+        "icon_clipboard" => TY_CLIPBOARD,
+        "icon_insect" => TY_INSECT,
+        "icon_list" => TY_LIST,
+        "icon_check_box" => TY_CHECK_BOX,
+        "icon_traffic_cone" => TY_TRAFFIC_CONE,
+        "icon_diamond" => TY_DIAMOND,
+        "icon_star" => TY_STAR,
+        _ => return None,
+    })
+}

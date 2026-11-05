@@ -1,9 +1,11 @@
 //! "Kanban" tab: the team's real board for one backlog level (columns, WIP limits, swimlanes
 //! and state mappings from ADO), with a Features/Stories switcher, a Columns menu to hide
-//! columns, epic, assignee and area filters (all saved per board), the done column as a drop zone
-//! that closes items instead of a list of them, each card's tasks as a
-//! checklist, 7pace time tracking per card, and drag-and-drop between and within
-//! columns.
+//! columns, epic, assignee and area filters (all saved per board), and drag-and-drop
+//! between and within columns ("Move back" on the toast afterwards). Column headers show how many
+//! cards the filters hide and, when one person's cards are shown, a WIP meter of those cards.
+//! The done column is a drop zone that closes items, with "View closed" for recent ones.
+//! Cards show the timer and add-time actions in their header and the time total in their footer;
+//! a chevron opens their tasks and the user's 7pace entries (only open cards load entries).
 
 use std::collections::HashSet;
 
@@ -18,7 +20,7 @@ use crate::components::filters::{
 use crate::components::icons;
 use crate::components::item_dialog::{open_edit, open_new};
 use crate::components::tasks::{CardTasks, TaskItem, task_items};
-use crate::components::time::{CardTime, EntryLoader};
+use crate::components::time::{CardTimeActions, CardTimeLog, CardTimeTotal, EntryLoader};
 use crate::components::widgets::{Assignee, DateLabel, Icon, Prio, StatePill};
 use crate::routes::Route;
 use crate::services;
@@ -94,7 +96,13 @@ pub fn Kanban(board: String) -> Element {
         .filter(|c| filters::matches_board(c, &prefs, me.as_ref()))
         .map(|c| c.id)
         .collect();
-    let mut shown_ids: Vec<CardId> = visible.iter().copied().collect();
+    // 7pace entries only for expanded cards and the tracked one: its rate limits are tight.
+    let timer_card = st.time.read().timer.as_ref().map(|t| t.work_item);
+    let mut shown_ids: Vec<CardId> = visible
+        .iter()
+        .copied()
+        .filter(|id| st.card_open.read().contains(id) || Some(*id) == timer_card)
+        .collect();
     shown_ids.sort_unstable();
     let in_areas: Vec<&Card> = base
         .iter()
@@ -150,6 +158,14 @@ pub fn Kanban(board: String) -> Element {
         .iter()
         .map(|c| column_head(ws, b, c, &visible))
         .collect();
+    // The WIP meter counts only the cards shown (like ADO), so it only means something when
+    // they are one person's: filtered to one person, or every shown card is the same assignee's.
+    let wip_on = filters::filtered_to_one_person(&prefs)
+        || filters::single_assignee(visible.iter().filter_map(|id| ws.cards.get(id))).is_some();
+    let col_shown: std::collections::HashMap<String, usize> = header_cols
+        .iter()
+        .map(|h| (h.id.clone(), h.shown))
+        .collect();
     let board_clone = b.clone();
     let area = epic_sel
         .and_then(|e| ws.cards.get(&e))
@@ -168,12 +184,13 @@ pub fn Kanban(board: String) -> Element {
     rsx! {
         div { class: "toolbar",
             {switcher}
-            label { class: "toolbar",
-                span { class: "label", "Epic" }
-                span { class: "select-wrap",
-                    select {
+            // The label sits inside the picker, like the iteration picker's icon.
+            span { class: "select-wrap",
+                span { class: "lead text", aria_hidden: "true", "Epic" }
+                select {
                         class: "field",
-                        style: "min-width: 220px; max-width: 360px",
+                        aria_label: "Epic",
+                        style: "min-width: 220px; max-width: 360px; padding-left: 52px",
                         onchange: {
                             let save = save.clone();
                             move |e: FormEvent| {
@@ -187,7 +204,6 @@ pub fn Kanban(board: String) -> Element {
                         }
                     }
                     span { class: "chev", Icon { svg: icons::CHEVRON_DOWN } }
-                }
             }
             FilterMenu {
                 label: "Assigned to",
@@ -265,8 +281,15 @@ pub fn Kanban(board: String) -> Element {
                         div { key: "h-{h.id}", class: "colhead", style: "--i: {i}",
                             StatePill { state: h.name.clone(), category: h.category, color: h.color.clone() }
                             span { class: "count", "{h.shown}" }
-                            if h.limit > 0 {
-                                span { class: if h.total > h.limit as usize { "wip over" } else { "wip" }, "data-tip": "WIP limit", "{h.total}/{h.limit}" }
+                            if h.total > h.shown {
+                                span { class: "hidden-n", "data-tip": "Hidden by the filters", "{h.total - h.shown} hidden" }
+                            }
+                            if h.limit > 0 && wip_on {
+                                span {
+                                    class: if h.shown > h.limit as usize { "wip over" } else { "wip" },
+                                    "data-tip": "Work in progress of the shown person against the column's WIP limit",
+                                    "{h.shown}/{h.limit} WIP"
+                                }
                             }
                         }
                     }
@@ -286,6 +309,8 @@ pub fn Kanban(board: String) -> Element {
                         task_ids: hierarchy.tasks.clone(),
                         grid_style: grid_style.clone(),
                         collapsed: collapsed_lanes,
+                        wip_on,
+                        col_shown: col_shown.clone(),
                     }
                 }
             }
@@ -348,6 +373,10 @@ fn Lane(
     task_ids: std::collections::HashMap<CardId, Vec<CardId>>,
     grid_style: String,
     collapsed: Signal<HashSet<String>>,
+    /// The WIP meter applies (one person's cards are shown).
+    wip_on: bool,
+    /// Column id → cards shown in it across lanes.
+    col_shown: std::collections::HashMap<String, usize>,
 ) -> Element {
     let st = use_app();
     let key = lane_id.clone().unwrap_or_default();
@@ -418,6 +447,7 @@ fn Lane(
                         key: "{col.id}",
                         index: i,
                         board_name: board_name.clone(),
+                        shown_in_column: col_shown.get(&col.id).copied().unwrap_or(0),
                         column: col,
                         lane_id: lane_id.clone(),
                         cards,
@@ -426,6 +456,7 @@ fn Lane(
                         root_titles: root_titles.clone(),
                         categories: categories.clone(),
                         tasks: tasks.clone(),
+                        wip_on,
                     }
                 }
             }
@@ -445,8 +476,11 @@ fn ColumnCell(
     root_titles: std::collections::HashMap<CardId, String>,
     categories: std::collections::HashMap<CardId, (kanban_core::StateCategory, String)>,
     tasks: std::collections::HashMap<CardId, (Vec<TaskItem>, Option<String>)>,
+    wip_on: bool,
+    shown_in_column: usize,
 ) -> Element {
     let mut st = use_app();
+    let mut show_closed = use_signal(|| false);
     let slot = st.drop_slot.read().clone();
     let dragging = match *st.drag.read() {
         Some(Drag::Card(id)) => Some(id),
@@ -458,8 +492,11 @@ fn ColumnCell(
     let incoming = dragging.is_some_and(|d| !cards.iter().any(|c| c.id == d));
     let over_limit = here.is_some()
         && incoming
+        && wip_on
         && column.item_limit > 0
-        && total + 1 > column.item_limit as usize;
+        && shown_in_column + 1 > column.item_limit as usize;
+    let limit = column.item_limit;
+    let closed_cards: Vec<(CardId, Card)> = cards.iter().map(|c| (c.id, c.clone())).collect();
     let class = format!(
         "col{}{}",
         if here.is_some() { " over" } else { "" },
@@ -504,12 +541,37 @@ fn ColumnCell(
                     Icon { svg: icons::CHECK }
                     strong { if here.is_some() && incoming { "Release to close" } else { "Drop here to close" } }
                     span { "data-tip": "Closed items stay listed on the List and Timeline", "{total} closed in the last {window} days" }
+                    if !closed_cards.is_empty() {
+                        button {
+                            class: "link sm",
+                            r#type: "button",
+                            aria_expanded: "{show_closed()}",
+                            onclick: move |_| show_closed.toggle(),
+                            if show_closed() { "Hide closed" } else { "View closed" }
+                        }
+                    }
+                    if show_closed() {
+                        ul { class: "closed-list",
+                            for (cid, c) in closed_cards.clone() {
+                                li { key: "{cid}",
+                                    button {
+                                        class: "task-title",
+                                        r#type: "button",
+                                        onclick: move |_| open_edit(st, &c, false),
+                                        span { class: "id", "{cid}" }
+                                        " {c.title}"
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
             for (i, card) in cards.into_iter().enumerate().filter(|_| !closing) {
                 Fragment { key: "{card.id}",
                 if before == Some(Some(card.id)) && dragging != Some(card.id) {
                     div { class: "slot" }
+                    if over_limit { p { class: "wip-warn", "Over the WIP limit: this makes {shown_in_column + 1} of {limit}" } }
                 }
                 CardView {
                     index: i,
@@ -524,6 +586,7 @@ fn ColumnCell(
             }
             if before == Some(None) {
                 div { class: "slot" }
+                if over_limit { p { class: "wip-warn", "Over the WIP limit: this makes {shown_in_column + 1} of {limit}" } }
             }
             if empty && before.is_none() && !closing {
                 p { class: "empty", "Nothing here" }
@@ -588,8 +651,9 @@ fn CardView(
         .timer
         .as_ref()
         .is_some_and(|t| t.work_item == id);
+    let accent = st.settings.read().appearance.kanban.accent.class();
     let class = format!(
-        "card{}{}{}",
+        "card {accent}{}{}{}",
         if dragging { " dragging" } else { "" },
         if pending { " pending" } else { "" },
         if tracking { " tracking" } else { "" }
@@ -599,6 +663,17 @@ fn CardView(
     let parent = card.clone();
     let (task_list, add_task) = tasks;
     let tags: Vec<String> = card.tags.iter().take(3).cloned().collect();
+    let expanded = st.card_open.read().contains(&id);
+    let tasks_done = task_list.iter().filter(|t| t.category.is_done()).count();
+    let has_details =
+        !task_list.is_empty() || add_task.is_some() || crate::time_tracking::connected(st);
+    // The epic line uses the epic's type colour.
+    let epic_color = epic.as_ref().and_then(|(eid, _)| {
+        st.workspace
+            .read()
+            .as_ref()
+            .and_then(|w| w.cards.get(eid).map(|e| w.type_color(&e.work_item_type)))
+    });
     rsx! {
         article {
             class: "{class}",
@@ -627,9 +702,25 @@ fn CardView(
                     span { class: "id", "{id}" }
                     Prio { priority: card.priority }
                 }
-            }
-            if let Some((eid, title)) = epic {
-                span { class: "epic-chip", "data-tip": "{eid} {title}", "{eid} {title}" }
+                div { class: "quick",
+                    CardTimeActions { card: parent.clone() }
+                }
+                if has_details {
+                    button {
+                        class: if expanded { "chev open" } else { "chev" },
+                        r#type: "button",
+                        draggable: "false",
+                        aria_expanded: "{expanded}",
+                        aria_label: if expanded { "Hide tasks and time log" } else { "Show tasks and time log" },
+                        "data-tip": if expanded { "Hide tasks and time log" } else { "Show tasks and time log" },
+                        onclick: move |e| {
+                            e.stop_propagation();
+                            let mut open = st.card_open.write();
+                            if !open.remove(&id) { open.insert(id); }
+                        },
+                        Icon { svg: icons::CHEVRON_DOWN }
+                    }
+                }
             }
             button {
                 class: "etitle sm",
@@ -639,6 +730,12 @@ fn CardView(
                 onclick: move |_| open_edit(st, &edit, false),
                 "{card.title}"
             }
+            if let Some((eid, title)) = epic {
+                span { class: "card-epic", "data-tip": "{eid} {title}",
+                    i { style: "background: #{epic_color.clone().unwrap_or_default()}" }
+                    span { "{title}" }
+                }
+            }
             if !tags.is_empty() {
                 div { class: "tags",
                     for t in tags { span { key: "{t}", class: "tag", "{t}" } }
@@ -646,11 +743,20 @@ fn CardView(
             }
             div { class: "bottom",
                 Assignee { id, person: card.assigned_to.clone(), title: card.title.clone() }
+                if !task_list.is_empty() {
+                    span { class: "task-sum", "data-tip": "Tasks done", Icon { svg: icons::CHECK_14 } "{tasks_done}/{task_list.len()}" }
+                }
+                div { class: "spacer" }
                 DateLabel { date: card.target_date, open: !category.is_done() }
+                CardTimeTotal { completed_work: card.completed_work }
             }
-            CardTime { card: parent.clone() }
-            if !task_list.is_empty() || add_task.is_some() {
-                CardTasks { parent: parent.clone(), tasks: task_list.clone(), task_type: add_task.clone() }
+            if expanded {
+                div { class: "card-more",
+                    if !task_list.is_empty() || add_task.is_some() {
+                        CardTasks { parent: parent.clone(), tasks: task_list.clone(), task_type: add_task.clone() }
+                    }
+                    CardTimeLog { card: parent.clone() }
+                }
             }
         }
     }

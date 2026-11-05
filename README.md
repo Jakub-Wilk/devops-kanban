@@ -6,10 +6,13 @@ state mappings, WIP limits, swimlanes, card fields) and lets you work the board 
 Azure DevOps web UI. Time can be logged through 7pace Timetracker. Every change is written
 straight back to Azure DevOps or 7pace. There is no server and no separate database.
 
-> **Status:** first implementation. Epic list, kanban (the team's real Features and Stories
-> boards, with hideable columns) and timeline views, with drag and drop written back to Azure
-> DevOps. 7pace time tracking on kanban cards: start/stop the timer, add time, and edit your
-> entries.
+> **Status:** first implementation. A List of the whole backlog tree (epics down to tasks, in
+> aligned columns, expandable per row or per level, sortable by due date or priority), a kanban
+> (the team's real Features and Stories boards, with hideable columns, a per-person WIP meter and
+> "Move back" after a move) and a timeline, with drag and drop written back to Azure DevOps.
+> 7pace time tracking on kanban cards: start/stop the timer, add time, and edit your entries in
+> the card's expandable details. Row and card style (tint, accent bar, type icons) is set in
+> *Settings › Appearance*.
 
 ## Prerequisites
 

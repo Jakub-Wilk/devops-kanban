@@ -176,10 +176,10 @@ pub fn Timeline() -> Element {
     rsx! {
         div { class: "toolbar", ItemFilters { tab: ItemTab::Timeline } }
         div { class: "legend",
-            span { span { style: "width: 11px; height: 11px; border-radius: 2px; transform: rotate(45deg); background: var(--accent)" } "Target date (drag to move)" }
-            span { span { style: "width: 28px; height: 10px; border-radius: 5px; border: 1px solid var(--accent); background: rgba(124,155,255,.33)" } "Time remaining" }
-            span { span { style: "width: 28px; height: 10px; border-radius: 5px; border: 1px solid var(--warn); background: repeating-linear-gradient(135deg, var(--warn) 0 3px, var(--warn-deep) 3px 6px)" } "Overdue" }
-            span { span { style: "width: 2px; height: 14px; background: var(--accent)" } "Today" }
+            span { span { class: "sw-marker" } "Target date (drag to move)" }
+            span { span { class: "sw-bar" } "Time remaining" }
+            span { span { class: "sw-late" } "Overdue" }
+            span { span { class: "sw-today" } "Today" }
             div { class: "spacer" }
             button {
                 class: "primary",

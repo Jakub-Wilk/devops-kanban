@@ -1,10 +1,55 @@
 {
   "count": 5,
   "value": [
-    { "name": "Bug", "referenceName": "Microsoft.VSTS.WorkItemTypes.Bug", "color": "CC293D", "isDisabled": false },
-    { "name": "Epic", "referenceName": "Microsoft.VSTS.WorkItemTypes.Epic", "color": "E06C00", "isDisabled": false },
-    { "name": "Feature", "referenceName": "Microsoft.VSTS.WorkItemTypes.Feature", "color": "773B93", "isDisabled": false },
-    { "name": "Task", "referenceName": "Microsoft.VSTS.WorkItemTypes.Task", "color": "A4880A", "isDisabled": false },
-    { "name": "User Story", "referenceName": "Microsoft.VSTS.WorkItemTypes.UserStory", "color": "0098C7", "isDisabled": false }
+    {
+      "name": "Bug",
+      "referenceName": "Microsoft.VSTS.WorkItemTypes.Bug",
+      "color": "CC293D",
+      "isDisabled": false,
+      "icon": {
+        "id": "icon_insect",
+        "url": "https://tfsprodweu2.visualstudio.com/_apis/wit/workItemIcons/icon_insect?color=CC293D&v=2"
+      }
+    },
+    {
+      "name": "Epic",
+      "referenceName": "Microsoft.VSTS.WorkItemTypes.Epic",
+      "color": "E06C00",
+      "isDisabled": false,
+      "icon": {
+        "id": "icon_crown",
+        "url": "https://tfsprodweu2.visualstudio.com/_apis/wit/workItemIcons/icon_crown?color=E06C00&v=2"
+      }
+    },
+    {
+      "name": "Feature",
+      "referenceName": "Microsoft.VSTS.WorkItemTypes.Feature",
+      "color": "773B93",
+      "isDisabled": false,
+      "icon": {
+        "id": "icon_trophy",
+        "url": "https://tfsprodweu2.visualstudio.com/_apis/wit/workItemIcons/icon_trophy?color=773B93&v=2"
+      }
+    },
+    {
+      "name": "Task",
+      "referenceName": "Microsoft.VSTS.WorkItemTypes.Task",
+      "color": "A4880A",
+      "isDisabled": false,
+      "icon": {
+        "id": "icon_clipboard",
+        "url": "https://tfsprodweu2.visualstudio.com/_apis/wit/workItemIcons/icon_clipboard?color=A4880A&v=2"
+      }
+    },
+    {
+      "name": "User Story",
+      "referenceName": "Microsoft.VSTS.WorkItemTypes.UserStory",
+      "color": "0098C7",
+      "isDisabled": false,
+      "icon": {
+        "id": "icon_book",
+        "url": "https://tfsprodweu2.visualstudio.com/_apis/wit/workItemIcons/icon_book?color=0098C7&v=2"
+      }
+    }
   ]
 }

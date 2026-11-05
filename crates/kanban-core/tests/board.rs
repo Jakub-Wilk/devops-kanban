@@ -251,6 +251,17 @@ fn type_colors_from_ado() {
 }
 
 #[test]
+fn type_icons_from_ado() {
+    let dtos: ListResponse<ado_client::WorkItemTypeDto> = fixture("workitemtypes.json");
+    let icons = kanban_core::workspace::type_icons(&dtos.value);
+    assert_eq!(icons["Epic"], "icon_crown");
+    assert_eq!(icons["Feature"], "icon_trophy");
+    assert_eq!(icons["User Story"], "icon_book");
+    assert_eq!(icons["Task"], "icon_clipboard");
+    assert_eq!(icons["Bug"], "icon_insect");
+}
+
+#[test]
 fn assignee_keeps_avatar_descriptor() {
     let cards = cards();
     let ada = cards[&111354].assigned_to.as_ref().unwrap();

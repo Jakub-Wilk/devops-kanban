@@ -240,7 +240,7 @@ pub fn FilterMenu(
     }
 }
 
-/// Epic status, Assigned to and Status menus plus "Clear filters", for the List or Timeline.
+/// Epic status, Assigned to, Area and Status menus plus "Clear filters", for the List or Timeline.
 #[component]
 pub fn ItemFilters(tab: ItemTab) -> Element {
     let st = use_app();

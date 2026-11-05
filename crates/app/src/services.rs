@@ -16,7 +16,7 @@ use kanban_core::{
 use serde_json::Value;
 use time::OffsetDateTime;
 
-use crate::state::{AppState, Status, Toast, ToastKind};
+use crate::state::{AppState, MoveBack, Status, Toast, ToastKind};
 
 const TOAST_SECS: u64 = 6;
 
@@ -34,12 +34,17 @@ pub fn build_client(settings: &Settings, pat: &str) -> Result<AdoClient, String>
     ))
 }
 
-pub fn toast(mut st: AppState, kind: ToastKind, text: impl Into<String>) {
+pub fn toast(st: AppState, kind: ToastKind, text: impl Into<String>) {
+    push_toast(st, kind, text.into(), None);
+}
+
+fn push_toast(mut st: AppState, kind: ToastKind, text: String, move_back: Option<MoveBack>) {
     let id = st.toasts.peek().iter().map(|t| t.id).max().unwrap_or(0) + 1;
     st.toasts.write().push(Toast {
         id,
         kind,
-        text: text.into(),
+        text,
+        move_back,
     });
     spawn(async move {
         tokio::time::sleep(Duration::from_secs(TOAST_SECS)).await;
@@ -250,12 +255,30 @@ pub fn reload_card_later(st: AppState, id: CardId, delay: Duration) {
 
 /// Drops `id` on `column_id` (and `lane_id`) at `index` of the `board` kanban.
 pub fn move_card(
+    st: AppState,
+    board: &str,
+    id: CardId,
+    column_id: String,
+    lane_id: Option<String>,
+    index: usize,
+) {
+    move_card_inner(st, board, id, column_id, lane_id, index, true);
+}
+
+/// Puts a card back where a toast's "Move back" says it came from. Runs as a normal move with
+/// the card's current revision, so a concurrent edit still surfaces as a conflict.
+pub fn move_back(st: AppState, m: MoveBack) {
+    move_card_inner(st, &m.board, m.id, m.column_id, m.lane_id, m.index, false);
+}
+
+fn move_card_inner(
     mut st: AppState,
     board: &str,
     id: CardId,
     column_id: String,
     lane_id: Option<String>,
     index: usize,
+    offer_move_back: bool,
 ) {
     let Some(client) = st.client.peek().clone() else {
         return;
@@ -278,6 +301,21 @@ pub fn move_card(
         {
             return;
         }
+        // Where it is now, for "Move back" and the toast text.
+        let origin = current_col.clone().map(|col| MoveBack {
+            board: board.to_owned(),
+            id,
+            column_id: col,
+            lane_id: b.has_lanes().then(|| b.lane_of(card)),
+            index: current_idx.unwrap_or(0),
+        });
+        let target_name = b
+            .columns
+            .iter()
+            .find(|c| c.id == column_id)
+            .map(|c| c.name.clone())
+            .unwrap_or_default();
+        let column_changed = current_col.as_deref() != Some(column_id.as_str());
         let (previous_id, next_id) = b.neighbours(&column_id, id, index);
         let target = MoveTarget {
             column_id: column_id.clone(),
@@ -293,6 +331,7 @@ pub fn move_card(
                 b.placement.clone(),
                 ws.project.clone(),
                 ws.team.clone(),
+                (origin, target_name, column_changed),
             )),
             Err(e) => {
                 drop(ws_ref);
@@ -301,7 +340,15 @@ pub fn move_card(
             }
         }
     };
-    let Some((plan, before, placement_before, project, team)) = prepared else {
+    let Some((
+        plan,
+        before,
+        placement_before,
+        project,
+        team,
+        (origin, target_name, column_changed),
+    )) = prepared
+    else {
         return;
     };
     if plan.is_noop() {
@@ -346,7 +393,16 @@ pub fn move_card(
         }
         end(st, id);
         match result {
-            Ok(()) => {}
+            Ok(()) => {
+                if offer_move_back && column_changed {
+                    push_toast(
+                        st,
+                        ToastKind::Info,
+                        format!("Moved #{id} to {target_name}."),
+                        origin,
+                    );
+                }
+            }
             Err(AdoError::Conflict { .. }) => {
                 toast(
                     st,

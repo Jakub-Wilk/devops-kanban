@@ -110,6 +110,11 @@ pub fn Board(project: String, team: String, board: String) -> Element {
     });
 
     let current = tab();
+    let project_mark: String = project
+        .chars()
+        .find(|c| c.is_alphanumeric())
+        .map(|c| c.to_uppercase().collect())
+        .unwrap_or_default();
     let it_sel = prefs.iteration.clone();
 
     rsx! {
@@ -128,22 +133,22 @@ pub fn Board(project: String, team: String, board: String) -> Element {
             header { class: "topbar",
                 div { class: "wrap",
                     Link { class: "ghost", to: Route::Setup {}, aria_label: "Switch project or team",
-                        span { class: "dim", "Project" }
-                        span { style: "font-weight: 600", "{project} / {team}" }
+                        span { class: "mark", aria_hidden: "true", "{project_mark}" }
+                        span { style: "font-weight: 600", "{project}" }
+                        span { class: "dim", "{team}" }
                         Icon { svg: icons::CHEVRON_DOWN }
+                    }
+                    // Views live in the top row: one header instead of two.
+                    div { class: "tabs top", role: "tablist", aria_label: "Views",
+                        TabButton { label: "List", icon: icons::LIST, on: current == Tab::List, count: counts.map(|c| c.0), onclick: move |_| set_tab(Tab::List) }
+                        TabButton { label: "Kanban", icon: icons::KANBAN, on: current == Tab::Kanban, count: counts.map(|c| c.1), onclick: move |_| set_tab(Tab::Kanban) }
+                        TabButton { label: "Timeline", icon: icons::TIMELINE, on: current == Tab::Timeline, count: counts.map(|c| c.2), onclick: move |_| set_tab(Tab::Timeline) }
                     }
                     div { class: "spacer" }
                     TimerChip {}
-                    span { class: "syncinfo",
-                        span { class: if matches!(status, Status::Loading | Status::Refreshing) { "syncdot busy" } else { "syncdot" } }
-                        match (&status, &last_sync) {
-                            (Status::Loading, _) | (Status::Refreshing, _) => "Refreshing…".to_owned(),
-                            (_, Some(t)) => format!("Synced {t}"),
-                            _ => String::new(),
-                        }
-                    }
+                    // Sync status and Reload in one control.
                     button {
-                        class: "ghost icon-only",
+                        class: "syncbtn",
                         r#type: "button",
                         aria_label: "Reload from Azure DevOps",
                         "data-tip": "Reload",
@@ -154,6 +159,12 @@ pub fn Board(project: String, team: String, board: String) -> Element {
                                 crate::time_tracking::reload(st);
                             }
                         },
+                        span { class: if matches!(status, Status::Loading | Status::Refreshing) { "syncdot busy" } else { "syncdot" } }
+                        match (&status, &last_sync) {
+                            (Status::Loading, _) | (Status::Refreshing, _) => "Refreshing…".to_owned(),
+                            (_, Some(t)) => format!("Synced {t}"),
+                            _ => String::new(),
+                        }
                         Icon { svg: icons::REFRESH }
                     }
                     span { class: "select-wrap",
@@ -183,15 +194,6 @@ pub fn Board(project: String, team: String, board: String) -> Element {
                     }
                     Link { class: "ghost icon-only", to: Route::Settings {}, aria_label: "Settings", Icon { svg: icons::GEAR } }
                     if let Some(me) = me { Avatar { person: me, large: true } }
-                }
-            }
-            div { class: "pagehead",
-                div { class: "wrap",
-                    div { class: "tabs", role: "tablist", aria_label: "Views",
-                        TabButton { label: "List", icon: icons::LIST, on: current == Tab::List, count: counts.map(|c| c.0), onclick: move |_| set_tab(Tab::List) }
-                        TabButton { label: "Kanban", icon: icons::KANBAN, on: current == Tab::Kanban, count: counts.map(|c| c.1), onclick: move |_| set_tab(Tab::Kanban) }
-                        TabButton { label: "Timeline", icon: icons::TIMELINE, on: current == Tab::Timeline, count: counts.map(|c| c.2), onclick: move |_| set_tab(Tab::Timeline) }
-                    }
                 }
             }
             div { class: "scroll",

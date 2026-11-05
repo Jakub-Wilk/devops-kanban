@@ -60,6 +60,9 @@ pub struct Workspace {
     /// Work item type → color (hex without `#`), as ADO shows it.
     #[serde(default)]
     pub type_colors: HashMap<String, String>,
+    /// Work item type → ADO icon id (`icon_book`, …), for the optional List type icons.
+    #[serde(default)]
+    pub type_icons: HashMap<String, String>,
     /// Newest `System.ChangedDate` seen; the next delta sync starts here.
     pub synced_to: Option<OffsetDateTime>,
 }
@@ -201,9 +204,11 @@ impl Workspace {
                 })
             }),
             type_colors: types
+                .as_ref()
                 .inspect_err(|e| tracing::warn!(error = %e, "no work item type colors"))
-                .map(|t| type_colors(&t))
+                .map(|t| type_colors(t))
                 .unwrap_or_default(),
+            type_icons: types.as_ref().map(|t| type_icons(t)).unwrap_or_default(),
             synced_to: None,
         };
         ws.upsert(&dtos);
@@ -295,6 +300,11 @@ impl Workspace {
         self.states.category(&card.work_item_type, &card.state)
     }
 
+    /// The type's ADO icon id, when ADO reported one.
+    pub fn type_icon(&self, work_item_type: &str) -> Option<String> {
+        self.type_icons.get(work_item_type).cloned()
+    }
+
     /// The type's ADO color (hex without `#`), gray when unknown.
     pub fn type_color(&self, work_item_type: &str) -> String {
         self.type_colors
@@ -321,6 +331,14 @@ pub fn type_colors(types: &[ado_client::WorkItemTypeDto]) -> HashMap<String, Str
     types
         .iter()
         .filter_map(|t| Some((t.name.clone(), t.color.clone()?.to_ascii_lowercase())))
+        .collect()
+}
+
+/// Type name → ADO icon id.
+pub fn type_icons(types: &[ado_client::WorkItemTypeDto]) -> HashMap<String, String> {
+    types
+        .iter()
+        .filter_map(|t| Some((t.name.clone(), t.icon.as_ref()?.id.clone())))
         .collect()
 }
 

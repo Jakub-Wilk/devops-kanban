@@ -161,9 +161,10 @@ Show 7pace's error message verbatim.
 Kanban only (`crates/app/src/time_tracking.rs`, `components/time.rs`):
 - **Startup / Settings:** `GET rest/me` validates the token, then `GET rest/activityTypes` and the
   timer's `current`.
-- **Entries:** the user's own `GET rest/workLogs?$workItemIds=…&$includeEditable=true` for the cards
-  the kanban shows (≤100 ids per call, `$count=500` pages), once per card; again after a write or
-  Reload. `isCanEdit == false` (approved weeks) makes an entry read-only.
+- **Entries:** the user's own `GET rest/workLogs?$workItemIds=…&$includeEditable=true` only for the
+  cards whose details are open (the chevron on a card) and the card being tracked (≤100 ids per
+  call, `$count=500` pages), once per card; again after a write or Reload. Collapsed cards make no
+  7pace call: their total comes from `CompletedWork`. `isCanEdit == false` (approved weeks) makes an entry read-only.
 - **Timer:** `current` on Kanban open, window focus, after start/stop, and every 5 minutes.
 - **Writes:** `POST`/`PATCH`/`DELETE rest/workLogs`, `startTracking`, `stopTracking/0`. After each,
   the card's entries are refetched and the ADO card is refetched ~6 s later for `CompletedWork`.

@@ -1,5 +1,5 @@
-//! 7pace time tracking UI: the per-card time section on the kanban (timer, add time, the user's
-//! entries), the running-timer chip in the top bar, the add/edit time dialog, and `TimeKeeper`,
+//! 7pace time tracking UI: on each kanban card the timer and add-time actions (header), the total
+//! (footer) and the user's entries (when the card is expanded), the running-timer chip in the top bar (compact, widens on hover/focus), the add/edit time dialog, and `TimeKeeper`,
 //! which connects at startup, ticks the clock while a timer runs and re-reads the timer on window
 //! focus and every few minutes.
 
@@ -50,8 +50,9 @@ pub fn TimeKeeper() -> Element {
     rsx! { TimeDialog {} }
 }
 
-/// Fetches the user's entries for the kanban's shown cards (only ones not loaded yet), and again
-/// after Reload; re-reads the timer when the kanban opens. Renders nothing.
+/// Fetches the user's entries for `ids` — the kanban's expanded cards and the tracked one — (only
+/// ones not loaded yet), and again after Reload; re-reads the timer when the kanban opens.
+/// Renders nothing.
 #[component]
 pub fn EntryLoader(ids: Vec<kanban_core::CardId>) -> Element {
     let st = use_app();
@@ -104,26 +105,100 @@ pub fn open_time_dialog(mut st: AppState, card: &Card, entry: Option<&TimeEntry>
     st.time_dialog.set(Some(state));
 }
 
-/// The time section of a kanban card: start/stop, add time, total, and the user's entries.
+/// Timer and "add time" for a kanban card's header. The tracked card shows its live clock and a
+/// stop button; others show start and add time, revealed on hover or keyboard focus.
 #[component]
-pub fn CardTime(card: Card) -> Element {
+pub fn CardTimeActions(card: Card) -> Element {
     let st = use_app();
-    let mut show_all = use_signal(|| false);
     if !time_tracking::connected(st) {
         return rsx! {};
     }
     let id = card.id;
     let t = st.time.read();
-    let entries: Vec<TimeEntry> = t.entries.get(&id).cloned().unwrap_or_default();
     let running = t.timer.as_ref().filter(|x| x.work_item == id).cloned();
     let busy = t.busy;
     drop(t);
     // Only the tracked card reads the clock, so only it re-renders every second.
     let elapsed = running.map(|r| r.elapsed_secs(*st.clock.read()));
-    let total = card
-        .completed_work
+    let add_card = card.clone();
+    rsx! {
+        if let Some(s) = elapsed {
+            span { class: "k-live", "data-tip": "Tracking", i {} span { class: "clock", "{format_clock(s)}" } }
+            button {
+                class: "k-ico stop",
+                r#type: "button",
+                draggable: "false",
+                disabled: busy,
+                "data-tip": "Stop tracking",
+                aria_label: "Stop tracking",
+                onclick: move |e| {
+                    e.stop_propagation();
+                    time_tracking::stop(st);
+                },
+                Icon { svg: icons::STOP }
+            }
+        } else {
+            button {
+                class: "k-ico q",
+                r#type: "button",
+                draggable: "false",
+                disabled: busy,
+                "data-tip": "Start tracking time on this item",
+                aria_label: "Start tracking",
+                onclick: move |e| {
+                    e.stop_propagation();
+                    time_tracking::start(st, id);
+                },
+                Icon { svg: icons::PLAY }
+            }
+            button {
+                class: "k-ico q",
+                r#type: "button",
+                draggable: "false",
+                "data-tip": "Add time",
+                aria_label: "Add time",
+                onclick: move |e| {
+                    e.stop_propagation();
+                    open_time_dialog(st, &add_card, None);
+                },
+                Icon { svg: icons::CLOCK_PLUS }
+            }
+        }
+    }
+}
+
+/// Time tracked on the card by everyone, from `CompletedWork` (works without 7pace).
+#[component]
+pub fn CardTimeTotal(completed_work: Option<f64>) -> Element {
+    let Some(total) = completed_work
         .filter(|h| *h > 0.0)
-        .map(|h| format_duration((h * 3600.0).round() as i64));
+        .map(|h| format_duration((h * 3600.0).round() as i64))
+    else {
+        return rsx! {};
+    };
+    rsx! {
+        span { class: "total", "data-tip": "Tracked in total, by everyone",
+            Icon { svg: icons::CLOCK }
+            "{total}"
+        }
+    }
+}
+
+/// The user's 7pace entries on an expanded card.
+#[component]
+pub fn CardTimeLog(card: Card) -> Element {
+    let st = use_app();
+    let mut show_all = use_signal(|| false);
+    if !time_tracking::connected(st) {
+        return rsx! {};
+    }
+    let entries: Vec<TimeEntry> = st
+        .time
+        .read()
+        .entries
+        .get(&card.id)
+        .cloned()
+        .unwrap_or_default();
     let n = entries.len();
     let shown: Vec<TimeEntry> = if show_all() {
         entries
@@ -132,55 +207,38 @@ pub fn CardTime(card: Card) -> Element {
     };
     let add_card = card.clone();
     rsx! {
-        div { class: "time",
-            div { class: "time-bar",
+        div { class: "time-log",
+            div { class: "sec",
+                "Your time"
                 button {
-                    class: if elapsed.is_some() { "tbtn on" } else { "tbtn" },
+                    class: "link sm",
                     r#type: "button",
                     draggable: "false",
-                    disabled: busy,
-                    "data-tip": if elapsed.is_some() { "Stop tracking" } else { "Start tracking time on this item" },
-                    aria_label: if elapsed.is_some() { "Stop tracking" } else { "Start tracking" },
-                    onclick: move |e| {
-                        e.stop_propagation();
-                        if elapsed.is_some() { time_tracking::stop(st) } else { time_tracking::start(st, id) }
-                    },
-                    Icon { svg: if elapsed.is_some() { icons::STOP } else { icons::PLAY } }
-                    if let Some(s) = elapsed { span { class: "clock", "{format_clock(s)}" } }
-                }
-                button {
-                    class: "tbtn",
-                    r#type: "button",
-                    draggable: "false",
-                    "data-tip": "Add time",
-                    aria_label: "Add time",
                     onclick: move |e| {
                         e.stop_propagation();
                         open_time_dialog(st, &add_card, None);
                     },
-                    Icon { svg: icons::CLOCK_PLUS }
-                }
-                div { class: "spacer" }
-                if let Some(total) = total {
-                    span { class: "total", "data-tip": "Tracked in total, by everyone", "{total}" }
+                    Icon { svg: icons::PLUS_14 }
+                    "Time"
                 }
             }
-            if !shown.is_empty() {
-                div { class: "entries",
-                    for e in shown {
-                        EntryRow { key: "{e.id}", card: card.clone(), entry: e }
-                    }
-                    if n > SHOWN_ENTRIES {
-                        button {
-                            class: "link sm",
-                            r#type: "button",
-                            draggable: "false",
-                            onclick: move |e| {
-                                e.stop_propagation();
-                                show_all.toggle();
-                            },
-                            if show_all() { "Show fewer" } else { "Show all ({n})" }
-                        }
+            if shown.is_empty() {
+                span { class: "none", "No entries yet" }
+            }
+            div { class: "entries",
+                for e in shown {
+                    EntryRow { key: "{e.id}", card: card.clone(), entry: e }
+                }
+                if n > SHOWN_ENTRIES {
+                    button {
+                        class: "link sm",
+                        r#type: "button",
+                        draggable: "false",
+                        onclick: move |e| {
+                            e.stop_propagation();
+                            show_all.toggle();
+                        },
+                        if show_all() { "Show fewer" } else { "Show all ({n})" }
                     }
                 }
             }
@@ -242,18 +300,21 @@ pub fn TimerChip() -> Element {
         .unwrap_or_default();
     let elapsed = timer.elapsed_secs(*st.clock.read());
     rsx! {
-        div { class: "timer-chip", role: "status",
+        // Compact: dot and clock. Hover or keyboard focus widens it to the item and Stop.
+        div { class: "timer-chip", role: "status", aria_label: "Tracking #{timer.work_item} {title}, {format_clock(elapsed)}",
             span { class: "rec" }
-            span { class: "tc-title", "data-tip": "Tracking #{timer.work_item} {title}", "#{timer.work_item} {title}" }
-            span { class: "clock", "{format_clock(elapsed)}" }
-            button {
-                class: "tc-stop",
-                r#type: "button",
-                disabled: busy,
-                "data-tip": "Stop tracking",
-                aria_label: "Stop tracking",
-                onclick: move |_| time_tracking::stop(st),
-                Icon { svg: icons::STOP }
+            button { class: "tc-clock clock", r#type: "button", aria_label: "Show the tracked item", "{format_clock(elapsed)}" }
+            span { class: "tc-more",
+                span { class: "tc-title", "#{timer.work_item} {title}" }
+                button {
+                    class: "tc-stop",
+                    r#type: "button",
+                    disabled: busy,
+                    "data-tip": "Stop tracking",
+                    aria_label: "Stop tracking",
+                    onclick: move |_| time_tracking::stop(st),
+                    Icon { svg: icons::STOP }
+                }
             }
         }
     }

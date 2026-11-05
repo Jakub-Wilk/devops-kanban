@@ -28,8 +28,12 @@ pub struct Settings {
     pub last_view: Option<String>,
     /// Width in px of the Timeline's item list (the separator position).
     pub timeline_info_width: Option<u32>,
+    /// The window was maximised when last used; the next launch opens maximised.
+    pub window_maximized: bool,
     pub api: ApiSettings,
     pub time_tracking: TimeTrackingSettings,
+    /// How List rows and kanban cards are drawn (Settings › Appearance).
+    pub appearance: AppearanceSettings,
     /// Per-board UI preferences, keyed `"<project>/<team>/<board>"`.
     pub boards: BTreeMap<String, BoardPrefs>,
     /// Per-team filters of the List and Timeline tabs, keyed `"<project>/<team>"`.
@@ -54,6 +58,72 @@ pub struct TimeTrackingSettings {
     pub api_version: String,
 }
 
+/// Which edge of a row or card carries the 4 px accent bar.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AccentSide {
+    #[default]
+    Left,
+    Right,
+    Off,
+}
+
+impl AccentSide {
+    pub const ALL: [Self; 3] = [Self::Left, Self::Right, Self::Off];
+
+    /// CSS class for the bar, or `""` when off.
+    pub fn class(self) -> &'static str {
+        match self {
+            Self::Left => "acc-left",
+            Self::Right => "acc-right",
+            Self::Off => "acc-off",
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Left => "Left",
+            Self::Right => "Right",
+            Self::Off => "Off",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AppearanceSettings {
+    pub list: ListStyle,
+    pub kanban: CardStyle,
+}
+
+/// List rows. The tint and the accent bar use the work item type's colour.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ListStyle {
+    /// Lean the row background towards the type colour.
+    pub tint: bool,
+    pub accent: AccentSide,
+    /// The type's icon (from Azure DevOps) before the title.
+    pub icon: bool,
+}
+
+impl Default for ListStyle {
+    fn default() -> Self {
+        Self {
+            tint: true,
+            accent: AccentSide::Left,
+            icon: false,
+        }
+    }
+}
+
+/// Kanban cards. The accent bar uses the card's state colour.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CardStyle {
+    pub accent: AccentSide,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct BoardPrefs {
@@ -75,6 +145,38 @@ pub struct ViewPrefs {
     pub iteration: Option<String>,
     pub list: TabFilters,
     pub timeline: TabFilters,
+    /// Order of the List's rows within each parent.
+    pub list_sort: ListSort,
+}
+
+/// The List's order. Only `Backlog` (ADO's rank) allows drag-to-reorder.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ListSort {
+    #[default]
+    Backlog,
+    TargetDate,
+    Priority,
+}
+
+impl ListSort {
+    pub const ALL: [Self; 3] = [Self::Backlog, Self::TargetDate, Self::Priority];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Backlog => "Backlog order",
+            Self::TargetDate => "Target date",
+            Self::Priority => "Priority",
+        }
+    }
+
+    pub fn key(self) -> &'static str {
+        match self {
+            Self::Backlog => "backlog",
+            Self::TargetDate => "target_date",
+            Self::Priority => "priority",
+        }
+    }
 }
 
 /// The filter bar of the List or the Timeline. Empty lists mean "no filter".
@@ -101,8 +203,10 @@ impl Default for Settings {
             log_level: "info".into(),
             last_view: None,
             timeline_info_width: None,
+            window_maximized: false,
             api: ApiSettings::default(),
             time_tracking: TimeTrackingSettings::default(),
+            appearance: AppearanceSettings::default(),
             boards: BTreeMap::new(),
             views: BTreeMap::new(),
         }
@@ -315,6 +419,28 @@ mod tests {
     }
 
     #[test]
+    fn appearance_defaults_and_round_trip() {
+        // Configs written before the setting existed keep today's look.
+        let old = Settings::from_toml("organization = \"x\"").unwrap();
+        assert_eq!(old.appearance, AppearanceSettings::default());
+        assert!(old.appearance.list.tint);
+        assert_eq!(old.appearance.list.accent, AccentSide::Left);
+        assert!(!old.appearance.list.icon);
+        assert_eq!(old.appearance.kanban.accent, AccentSide::Left);
+
+        let s = Settings::from_toml(
+            "organization = \"x\"\n[appearance.list]\naccent = \"right\"\nicon = true\n[appearance.kanban]\naccent = \"off\"",
+        )
+        .unwrap();
+        assert_eq!(s.appearance.list.accent, AccentSide::Right);
+        assert!(s.appearance.list.icon);
+        assert!(s.appearance.list.tint);
+        assert_eq!(s.appearance.kanban.accent, AccentSide::Off);
+        let back = Settings::from_toml(&s.to_toml().unwrap()).unwrap();
+        assert_eq!(back.appearance, s.appearance);
+    }
+
+    #[test]
     fn hidden_columns_round_trip() {
         let mut s = Settings {
             organization: "o".into(),
@@ -369,6 +495,7 @@ mod tests {
                 assignees: vec!["@me".into()],
                 ..TabFilters::default()
             },
+            list_sort: ListSort::TargetDate,
         };
         s.set_view_prefs("IT Finance", "IT Finance Team", prefs.clone());
         let back = Settings::from_toml(&s.to_toml().unwrap()).unwrap();

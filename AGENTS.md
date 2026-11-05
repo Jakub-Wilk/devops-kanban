@@ -3,11 +3,14 @@
 Guide for agents and developers working on **devops-kanban**: a Rust + Dioxus **desktop** app
 that provides a more ergonomic kanban board on top of Azure DevOps Boards.
 
-Status: **first implementation**. The UI follows the "DevOps Board Manager" design (epic list,
-kanban, timeline, item dialog; dark theme, IBM Plex). Keep new UI consistent with
-`crates/app/assets/main.css` and don't redesign without being asked. 7pace time tracking is on the
-kanban only (timer, add/edit time, the user's entries per card) plus a running-timer chip in the
-top bar; the app side is `crates/app/src/time_tracking.rs` and `components/time.rs`.
+Status: **first implementation**. The UI follows the "DevOps Board Manager" design (List of the
+full backlog tree in aligned columns, kanban, timeline, item dialog; dark "Graphite" theme, Inter
+with IBM Plex Mono for IDs and times). Keep new UI consistent with `crates/app/assets/main.css`
+(use its spacing `--s1…--s6` and radius `--r-sm/md/lg` tokens) and don't redesign without being
+asked. Row and card style is user-configurable (`appearance` in `docs/settings.md`). 7pace time
+tracking is on the kanban only (timer and add time in the card header, the user's entries in the
+card's expandable details, fetched only when a card is open) plus a compact running-timer chip in
+the top bar; the app side is `crates/app/src/time_tracking.rs` and `components/time.rs`.
 
 ## Crate map
 

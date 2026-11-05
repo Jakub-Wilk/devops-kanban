@@ -1,5 +1,5 @@
-//! Tasks under their parent: the data each view needs ([`TaskItem`]), the List's task row and
-//! the checklist inside a kanban card. Tasks follow their parent: filters never hide one on its
+//! Tasks under their parent: the data each view needs ([`TaskItem`]) and the checklist inside a
+//! kanban card (the List draws tasks as ordinary tree rows). Tasks follow their parent: filters never hide one on its
 //! own.
 
 use dioxus::prelude::*;
@@ -7,7 +7,7 @@ use kanban_core::{Card, CardId, StateCategory, Workspace};
 
 use crate::components::icons;
 use crate::components::item_dialog::{open_edit, open_new};
-use crate::components::widgets::{Assignee, Avatar, DateLabel, Icon, Prio, StatePill};
+use crate::components::widgets::{Avatar, Icon};
 use crate::services;
 use crate::state::use_app;
 
@@ -34,37 +34,6 @@ pub fn task_items(ws: &Workspace, tasks: Option<&Vec<CardId>>) -> Vec<TaskItem> 
             type_color: ws.type_color(&c.work_item_type),
         })
         .collect()
-}
-
-/// A task in the epic list, one level below its parent. Not draggable.
-#[component]
-pub fn TaskRow(task: TaskItem, depth: u8) -> Element {
-    let st = use_app();
-    let card = task.card;
-    let id = card.id;
-    let pending = st.pending.read().contains(&id);
-    let edit = card.clone();
-    rsx! {
-        div { class: "crow task depth-{depth.min(3)}", style: "--tc: #{task.type_color}",
-            span { class: "grip-space" }
-            span { class: "id", style: "width: 56px", "{id}" }
-            Prio { priority: card.priority }
-            span { class: "type", "{card.work_item_type}" }
-            span { style: "flex: 1 1 240px; min-width: 0",
-                button {
-                    class: "etitle sm",
-                    r#type: "button",
-                    aria_label: "Edit {card.title}",
-                    onclick: move |_| open_edit(st, &edit, false),
-                    "{card.title}"
-                }
-            }
-            span { style: "width: 104px", DateLabel { date: card.target_date, open: !task.category.is_done() } }
-            StatePill { state: card.state.clone(), category: task.category, color: task.color }
-            Assignee { id, person: card.assigned_to.clone(), title: card.title.clone() }
-            if pending { span { class: "spinner", style: "color: var(--accent)" } }
-        }
-    }
 }
 
 /// "+ Task" on a row that can own tasks.

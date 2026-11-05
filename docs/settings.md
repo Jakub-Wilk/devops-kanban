@@ -30,12 +30,35 @@ The Setup view creates this file on first run. Start from
 | `log_level`              | string  | `info`                  | `tracing` filter (`RUST_LOG` syntax). `RUST_LOG` overrides it |
 | `last_view`              | string? | none                    | Last tab on the board screen: `list`, `kanban` or `timeline` |
 | `timeline_info_width`    | int?    | none (560)              | Width in px of the Timeline's item list, set by dragging the separator |
+| `window_maximized`       | bool    | `false`                 | The window was maximised when last used, so the app opens maximised. Written by the app |
 | `api.base_url`           | string  | `https://dev.azure.com` | ADO host |
 | `api.api_version`        | string  | `7.1`                   | api-version for all stable endpoints |
 | `api.max_batch`          | int     | `200`                   | Ids per `workitemsbatch` call. The ADO maximum is 200 |
 | `time_tracking.enabled`  | bool    | `false`                 | 7pace on the kanban (timer, add time, your entries). Toggled in *Settings*; saving a token turns it on. Card totals from `CompletedWork` work without it |
 | `time_tracking.base_url` | string  | `https://{organization}.timehub.7pace.com` | 7pace host |
 | `time_tracking.api_version` | string | `3.2`               | 7pace REST api-version (required on every call) |
+
+### Appearance
+
+Set in *Settings › Appearance*, which shows a preview of each option. Older configs without these
+keys get the defaults, which match the original look.
+
+| Key                          | Type   | Default | Meaning |
+|------------------------------|--------|---------|---------|
+| `appearance.list.tint`       | bool   | `true`  | List rows lean their background towards the work item type colour |
+| `appearance.list.accent`     | string | `left`  | 4 px bar in the type colour on List rows: `left`, `right` or `off` |
+| `appearance.list.icon`       | bool   | `false` | The type's icon (as set in Azure DevOps) before each List title |
+| `appearance.kanban.accent`   | string | `left`  | 4 px bar in the state colour on kanban cards: `left`, `right` or `off` |
+
+```toml
+[appearance.list]
+tint = true
+accent = "left"
+icon = false
+
+[appearance.kanban]
+accent = "off"
+```
 
 ### Per-board preferences
 
@@ -66,6 +89,7 @@ search box is not saved. Empty lists mean "no filter".
 | Key                     | Type     | Default | Meaning |
 |-------------------------|----------|---------|---------|
 | `iteration`             | string?  | none    | Iteration path from the header picker (includes child iterations) |
+| `list_sort`             | string   | `backlog` | Order of the List within each parent: `backlog` (ADO rank; the only order you can drag in), `target_date` or `priority` |
 | `<tab>.epic_states`     | string[] | `[]`    | Epic states shown |
 | `<tab>.assignees`       | string[] | `[]`    | `@me`, `@unassigned` or a `uniqueName` |
 | `<tab>.areas`           | string[] | `[]`    | Area paths, each including the areas below it |

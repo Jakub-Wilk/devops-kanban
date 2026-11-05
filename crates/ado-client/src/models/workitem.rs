@@ -82,6 +82,16 @@ pub struct WorkItemTypeDto {
     pub color: Option<String>,
     #[serde(default)]
     pub is_disabled: bool,
+    /// The type's icon as ADO shows it (`icon_book`, `icon_crown`, …).
+    #[serde(default)]
+    pub icon: Option<WorkItemIconDto>,
+}
+
+/// `icon` of a work item type. The `url` renders a coloured PNG; we only use the id.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkItemIconDto {
+    pub id: String,
 }
 
 /// `GET wit/workitemtypes/{type}/states`.

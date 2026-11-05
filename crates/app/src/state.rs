@@ -33,8 +33,9 @@ pub enum Status {
 pub enum Drag {
     /// A kanban card.
     Card(CardId),
-    /// A row of the epic list (an epic, or a child within its epic).
-    Row { id: CardId, root: Option<CardId> },
+    /// A row of the List. It can only be dropped among rows with the same `parent` (`None` for
+    /// epics), so drags reorder siblings and never reparent.
+    Row { id: CardId, parent: Option<CardId> },
 }
 
 /// Where a dragged kanban card would land.
@@ -59,6 +60,19 @@ pub struct Toast {
     pub id: u64,
     pub kind: ToastKind,
     pub text: String,
+    /// Offered after a kanban move: put the card back where it was.
+    pub move_back: Option<MoveBack>,
+}
+
+/// Where a moved card came from. Moving back is a second, ordinary move (a new revision in ADO,
+/// and process rules may set fields such as Closed Date again), not an undo.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MoveBack {
+    pub board: String,
+    pub id: CardId,
+    pub column_id: String,
+    pub lane_id: Option<String>,
+    pub index: usize,
 }
 
 /// The new/edit dialog.
@@ -139,6 +153,9 @@ pub struct AppState {
     pub pending: Signal<HashSet<CardId>>,
     pub drag: Signal<Option<Drag>>,
     pub drop_slot: Signal<Option<DropSlot>>,
+    /// Kanban cards whose tasks and time log are open. Only these (and the tracked card) load
+    /// 7pace entries.
+    pub card_open: Signal<HashSet<CardId>>,
     pub dialog: Signal<Option<DialogState>>,
     pub toasts: Signal<Vec<Toast>>,
     pub last_sync: Signal<Option<OffsetDateTime>>,
@@ -164,6 +181,7 @@ impl AppState {
             pending: Signal::new(HashSet::new()),
             drag: Signal::new(None),
             drop_slot: Signal::new(None),
+            card_open: Signal::new(HashSet::new()),
             dialog: Signal::new(None),
             toasts: Signal::new(Vec::new()),
             last_sync: Signal::new(None),
