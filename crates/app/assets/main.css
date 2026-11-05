@@ -469,18 +469,22 @@ main.panel.fill .board-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; -
 .tl-body { position: relative; }
 .tl-head, .tl-row { display: grid; grid-template-columns: var(--info) 6px minmax(0, 1fr); }
 .tl-head { position: sticky; top: 0; z-index: 8; border-bottom: 1px solid var(--line-strong); background: var(--surface); }
-/* The info column is a table: one grid for the header and every row, so IDs, titles, dates and
-   states line up (tasks indent inside the title cell, as on the List). */
-.tl { --tl-icon: 0px; --tl-date: 92px; }
-.tl.icons { --tl-icon: 18px; }
+/* The info column is a table: one grid for the header and every row, so IDs, titles, people,
+   states and dates line up. The title cell holds the chevron, icon and title, and tasks indent
+   inside it, as on the List. */
+.tl { --tl-date: 92px; }
 .tl.narrow { --tl-date: 0px; }
-.tl-info { min-width: 0; background: var(--panel); display: grid; grid-template-columns: 32px 56px 22px var(--tl-icon) minmax(0, 1fr) var(--tl-date) 112px 28px; align-items: center; column-gap: var(--s2); padding: var(--s3) var(--s3) var(--s3) var(--s4); transition: background .15s; }
-.tl-info .c-twirl, .tl-info .c-ty, .tl-info .c-who { display: flex; align-items: center; min-width: 0; }
+.tl-info { min-width: 0; background: var(--panel); display: grid; grid-template-columns: 56px 22px minmax(0, 1fr) 28px 112px var(--tl-date); align-items: center; column-gap: var(--s2); padding: var(--s3) var(--s3) var(--s3) var(--s4); transition: background .15s; }
+.tl-info .c-who { display: flex; align-items: center; min-width: 0; }
 .tl-info .c-state { min-width: 0; overflow: hidden; }
-.tl-info .c-title { min-width: 0; display: flex; flex-direction: column; }
-.tl-info .c-title .etitle { min-height: 28px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.tl-info .c-title { min-width: 0; display: flex; align-items: center; gap: var(--s2); }
+.tl-info .c-title .twirl, .tl-info .c-title .twirl-space { flex: none; width: 28px; min-width: 28px; height: 28px; padding: 0; }
+.tl-info .c-text { min-width: 0; flex: 1 1 auto; display: flex; flex-direction: column; }
+.tl-info .c-text .etitle { min-height: 28px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
 .tl-info .c-epic { color: var(--faint); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tl-row.child .c-title { padding-left: 20px; }
+.tl-row.child .c-title { padding-left: 24px; }
+.tl-date.none { color: var(--faint); }
+.tl-date .late { color: var(--warn); font-size: 12px; font-weight: 600; }
 .tl-head .tl-info { background: var(--surface); min-height: 56px; color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
 .tl-date { min-width: 0; display: flex; flex-direction: column; font-size: 13px; color: var(--text-2); }
 .tl.narrow .tl-date { visibility: hidden; overflow: hidden; }
@@ -524,8 +528,6 @@ main.panel.fill .board-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; -
 .mk.late { background: var(--warn); }
 .mk.fin { background: transparent; border-color: var(--placeholder); }
 .mk-tip { position: absolute; top: 4px; z-index: 12; transform: translateX(-50%); background: var(--text); color: var(--bg); font-size: 12px; font-weight: 600; padding: 2px var(--s2); border-radius: var(--r-sm); white-space: nowrap; pointer-events: none; animation: popIn .12s var(--ease) both; }
-.tl-undated { position: absolute; top: 50%; left: 16px; right: 16px; border-top: 1px dashed #3A4250; pointer-events: none; }
-.tl-undated span { position: absolute; top: -10px; left: 8px; background: var(--panel); padding: 0 var(--s3); color: var(--faint); font-size: 12px; }
 .tl-set { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 3; }
 
 /* ---------- dialog (the dialogs themselves are in dialogs.css) ---------- */

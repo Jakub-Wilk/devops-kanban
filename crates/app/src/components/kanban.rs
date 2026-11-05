@@ -876,6 +876,9 @@ fn CardView(
                 span {
                     span { class: "id", "{id}" }
                     Prio { priority: card.priority }
+                    if !task_list.is_empty() {
+                        span { class: "task-sum", "data-tip": "Tasks done", Icon { svg: icons::CHECK_14 } "{tasks_done}/{task_list.len()}" }
+                    }
                 }
                 div { class: "quick",
                     CardTimeActions { card: parent.clone() }
@@ -968,11 +971,8 @@ fn CardView(
             }
             div { class: "bottom",
                 Assignee { id, person: card.assigned_to.clone(), title: card.title.clone() }
-                if !task_list.is_empty() {
-                    span { class: "task-sum", "data-tip": "Tasks done", Icon { svg: icons::CHECK_14 } "{tasks_done}/{task_list.len()}" }
-                }
                 div { class: "spacer" }
-                DateLabel { date: card.target_date, open: !category.is_done() }
+                DateLabel { date: card.target_date, open: !category.is_done(), compact: true }
                 CardTimeTotal { completed_work: card.completed_work }
             }
             if has_details {

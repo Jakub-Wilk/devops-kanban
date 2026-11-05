@@ -146,9 +146,8 @@ pub fn Timeline() -> Element {
     };
     let current = *mode.read();
     let tl_class = format!(
-        "tl{}{}{}",
+        "tl{}{}",
         if info < NARROW_INFO_PX { " narrow" } else { "" },
-        if style.icon { " icons" } else { "" },
         match current {
             Some(PointerMode::Pan { .. }) => " panning",
             Some(PointerMode::Split { .. }) => " splitting",
@@ -260,14 +259,12 @@ pub fn Timeline() -> Element {
                 div { class: "tl-head",
                     // Column headers, like the List's: every row's info cell uses the same grid.
                     div { class: "tl-info", role: "row",
-                        span {}
                         span { role: "columnheader", "ID" }
                         span { role: "columnheader", "Pri" }
-                        span {}
-                        span { role: "columnheader", "Title · earliest target first" }
-                        span { class: "tl-date", role: "columnheader", "Target" }
+                        span { role: "columnheader", class: "c-title", "Title · earliest target first" }
+                        span { class: "sr-only", role: "columnheader", "Assigned to" }
                         span { role: "columnheader", "Status" }
-                        span {}
+                        span { class: "tl-date", role: "columnheader", "Target" }
                     }
                     div { class: "tl-gap" }
                     div { class: "tl-track", onpointerdown: start_pan,
@@ -350,51 +347,50 @@ pub fn Timeline() -> Element {
                                     style.accent.class()
                                 ),
                                 style: "--i: {i}; --tc: #{look.0}",
+                                // Columns: ID · Pri · title (chevron, icon, title; indented like the
+                                // List) · person · status · target date.
                                 div { class: "tl-info",
-                                    span { class: "c-twirl",
-                                    if n_tasks > 0 {
-                                        button {
-                                            class: if is_open { "twirl sm open" } else { "twirl sm" },
-                                            r#type: "button",
-                                            aria_expanded: "{is_open}",
-                                            aria_label: if is_open { "Hide the tasks of {card.title}" } else { "Show the tasks of {card.title}" },
-                                            "data-tip": if n_tasks == 1 { "1 task".to_owned() } else { format!("{n_tasks} tasks") },
-                                            onclick: move |_| {
-                                                let mut e = expanded.write();
-                                                if !e.remove(&id) { e.insert(id); }
-                                            },
-                                            Icon { svg: icons::CHEVRON_RIGHT }
-                                            span { class: "count", "{n_tasks}" }
-                                        }
-                                    } else {
-                                        span { class: "twirl-space" }
-                                    }
-                                    }
                                     span { class: "id", "{id}" }
                                     Prio { priority: card.priority }
-                                    span { class: "c-ty",
+                                    div { class: "c-title",
+                                        if n_tasks > 0 {
+                                            button {
+                                                class: if is_open { "twirl sm open" } else { "twirl sm" },
+                                                r#type: "button",
+                                                aria_expanded: "{is_open}",
+                                                aria_label: if is_open { "Hide the tasks of {card.title}" } else { "Show the tasks of {card.title}" },
+                                                "data-tip": if n_tasks == 1 { "1 task".to_owned() } else { format!("{n_tasks} tasks") },
+                                                onclick: move |_| {
+                                                    let mut e = expanded.write();
+                                                    if !e.remove(&id) { e.insert(id); }
+                                                },
+                                                Icon { svg: icons::CHEVRON_RIGHT }
+                                            }
+                                        } else {
+                                            span { class: "twirl-space" }
+                                        }
                                         if style.icon {
                                             TypeIcon { icon: look.1.clone(), src: look.2.clone(), color: look.0.clone(), label: card.work_item_type.clone() }
                                         }
-                                    }
-                                    div { class: "c-title",
-                                        button {
-                                            class: "etitle sm",
-                                            r#type: "button",
-                                            aria_label: "Edit {card.title}",
-                                            onclick: move |_| open_edit(st, &edit, false),
-                                            "{card.title}"
+                                        div { class: "c-text",
+                                            button {
+                                                class: "etitle sm",
+                                                r#type: "button",
+                                                aria_label: "Edit {card.title}",
+                                                onclick: move |_| open_edit(st, &edit, false),
+                                                "{card.title}"
+                                            }
+                                            if let Some(e) = epic {
+                                                span { class: "c-epic", "{e}" }
+                                            }
                                         }
-                                        if let Some(e) = epic {
-                                            span { class: "c-epic", "{e}" }
-                                        }
                                     }
-                                    div { class: "tl-date",
-                                        span { "{date_text}" }
-                                        if row.overdue { span { style: "color: var(--warn); font-size: 12px; font-weight: 600", "Overdue" } }
-                                    }
-                                    span { class: "c-state", StatePill { state: card.state.clone(), category: cat, color } }
                                     span { class: "c-who", Assignee { id, person: card.assigned_to.clone(), title: card.title.clone() } }
+                                    span { class: "c-state", StatePill { state: card.state.clone(), category: cat, color } }
+                                    div { class: if card.target_date.is_some() { "tl-date" } else { "tl-date none" },
+                                        span { "{date_text}" }
+                                        if row.overdue { span { class: "late", "Overdue" } }
+                                    }
                                 }
                                 div { class: "tl-gap" }
                                 div { class: "tl-track", onpointerdown: start_pan,
@@ -434,9 +430,8 @@ pub fn Timeline() -> Element {
                                                 if side == "right" { Icon { svg: icons::CHEVRON_RIGHT } }
                                             }
                                         },
-                                        (None, _) => rsx! {
-                                            div { class: "tl-undated", span { "No target date" } }
-                                        },
+                                        // Undated: the date column says so; the track stays empty.
+                                        (None, _) => rsx! {},
                                     }
                                 }
                             }

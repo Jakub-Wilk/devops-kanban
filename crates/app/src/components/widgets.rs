@@ -136,7 +136,13 @@ pub fn short_date(d: Date) -> String {
 /// Target date. When it is past and the item is still open, it turns amber and says how late
 /// it is ("2 days late"), so the warning doesn't rely on colour.
 #[component]
-pub fn DateLabel(date: Option<Date>, #[props(default)] open: bool) -> Element {
+pub fn DateLabel(
+    date: Option<Date>,
+    #[props(default)] open: bool,
+    /// Late: only "N days late" (the date moves to the tooltip). For the kanban's cards.
+    #[props(default)]
+    compact: bool,
+) -> Element {
     let Some(d) = date else {
         return rsx! {};
     };
@@ -148,6 +154,15 @@ pub fn DateLabel(date: Option<Date>, #[props(default)] open: bool) -> Element {
         1 => "1 day late".to_owned(),
         n => format!("{n} days late"),
     };
+    if late && compact {
+        return rsx! {
+            span { class: "{class}", "data-tip": "Target date {text}",
+                Icon { svg: icons::CALENDAR }
+                span { class: "sr-only", "Target date {text}: " }
+                "{late_text}"
+            }
+        };
+    }
     rsx! {
         span { class: "{class}", "data-tip": if late { "Overdue" } else { "Target date" },
             Icon { svg: icons::CALENDAR }
