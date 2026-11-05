@@ -445,10 +445,21 @@ main.panel.fill .board-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; -
 .tl-body { position: relative; }
 .tl-head, .tl-row { display: grid; grid-template-columns: var(--info) 6px minmax(0, 1fr); }
 .tl-head { position: sticky; top: 0; z-index: 8; border-bottom: 1px solid var(--line-strong); background: var(--surface); }
-.tl-info { min-width: 0; background: var(--panel); display: flex; align-items: center; gap: var(--s3); padding: var(--s3) var(--s4) var(--s3) var(--s5); transition: background .15s; }
+/* The info column is a table: one grid for the header and every row, so IDs, titles, dates and
+   states line up (tasks indent inside the title cell, as on the List). */
+.tl { --tl-icon: 0px; --tl-date: 92px; }
+.tl.icons { --tl-icon: 18px; }
+.tl.narrow { --tl-date: 0px; }
+.tl-info { min-width: 0; background: var(--panel); display: grid; grid-template-columns: 32px 56px 22px var(--tl-icon) minmax(0, 1fr) var(--tl-date) 112px 28px; align-items: center; column-gap: var(--s2); padding: var(--s3) var(--s3) var(--s3) var(--s4); transition: background .15s; }
+.tl-info .c-twirl, .tl-info .c-ty, .tl-info .c-who { display: flex; align-items: center; min-width: 0; }
+.tl-info .c-state { min-width: 0; overflow: hidden; }
+.tl-info .c-title { min-width: 0; display: flex; flex-direction: column; }
+.tl-info .c-title .etitle { min-height: 28px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.tl-info .c-epic { color: var(--faint); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tl-row.child .c-title { padding-left: 20px; }
 .tl-head .tl-info { background: var(--surface); min-height: 56px; color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
-.tl-date { width: 96px; flex: none; display: flex; flex-direction: column; font-size: 13px; color: var(--text-2); }
-.tl.narrow .tl-date { display: none; }
+.tl-date { min-width: 0; display: flex; flex-direction: column; font-size: 13px; color: var(--text-2); }
+.tl.narrow .tl-date { visibility: hidden; overflow: hidden; }
 .tl-gap { background: var(--line); }
 .tl-split { position: absolute; z-index: 10; top: 0; bottom: 0; left: var(--info); width: 6px; cursor: col-resize; touch-action: none; transition: background .15s; }
 .tl-split:hover, .tl.splitting .tl-split { background: var(--accent); }
@@ -473,7 +484,6 @@ main.panel.fill .board-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; -
 .twirl.sm { flex: none; width: auto; min-width: 24px; height: 28px; gap: 2px; padding: 0 var(--s1); }
 .twirl.sm .count { font-size: 11px; padding: 0 5px; }
 .twirl-space { flex: none; width: 24px; }
-.tl-row.child .tl-info { padding-left: 52px; }
 /* Row style (View options › Timeline rows): on the info column, like the List's rows. */
 .tl-row.tint .tl-info { background: color-mix(in srgb, var(--tc, transparent) 9%, var(--panel)); }
 .tl-row.child.tint .tl-info { background: color-mix(in srgb, var(--tc, transparent) 7%, var(--panel)); }

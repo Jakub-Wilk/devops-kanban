@@ -18,7 +18,7 @@ use crate::components::widgets::{Assignee, Icon, Prio, StatePill, TypeIcon, toda
 use crate::services;
 use crate::state::use_app;
 
-const DEFAULT_INFO_PX: f64 = 560.0;
+const DEFAULT_INFO_PX: f64 = 640.0;
 const MIN_INFO_PX: f64 = 280.0;
 const MIN_TRACK_PX: f64 = 240.0;
 const SEP_PX: f64 = 6.0;
@@ -146,8 +146,9 @@ pub fn Timeline() -> Element {
     };
     let current = *mode.read();
     let tl_class = format!(
-        "tl{}{}",
+        "tl{}{}{}",
         if info < NARROW_INFO_PX { " narrow" } else { "" },
+        if style.icon { " icons" } else { "" },
         match current {
             Some(PointerMode::Pan { .. }) => " panning",
             Some(PointerMode::Split { .. }) => " splitting",
@@ -257,7 +258,17 @@ pub fn Timeline() -> Element {
                     },
                 }
                 div { class: "tl-head",
-                    div { class: "tl-info", "Work item, earliest target first" }
+                    // Column headers, like the List's: every row's info cell uses the same grid.
+                    div { class: "tl-info", role: "row",
+                        span {}
+                        span { role: "columnheader", "ID" }
+                        span { role: "columnheader", "Pri" }
+                        span {}
+                        span { role: "columnheader", "Title · earliest target first" }
+                        span { class: "tl-date", role: "columnheader", "Target" }
+                        span { role: "columnheader", "Status" }
+                        span {}
+                    }
                     div { class: "tl-gap" }
                     div { class: "tl-track", onpointerdown: start_pan,
                         for m in months.iter() {
@@ -340,6 +351,7 @@ pub fn Timeline() -> Element {
                                 ),
                                 style: "--i: {i}; --tc: #{look.0}",
                                 div { class: "tl-info",
+                                    span { class: "c-twirl",
                                     if n_tasks > 0 {
                                         button {
                                             class: if is_open { "twirl sm open" } else { "twirl sm" },
@@ -357,30 +369,32 @@ pub fn Timeline() -> Element {
                                     } else {
                                         span { class: "twirl-space" }
                                     }
-                                    span { class: "id", style: "width: 56px", "{id}" }
-                                    Prio { priority: card.priority }
-                                    if style.icon {
-                                        TypeIcon { icon: look.1.clone(), src: look.2.clone(), color: look.0.clone(), label: card.work_item_type.clone() }
                                     }
-                                    div { style: "flex: 1 1 0; min-width: 0; display: flex; flex-direction: column",
+                                    span { class: "id", "{id}" }
+                                    Prio { priority: card.priority }
+                                    span { class: "c-ty",
+                                        if style.icon {
+                                            TypeIcon { icon: look.1.clone(), src: look.2.clone(), color: look.0.clone(), label: card.work_item_type.clone() }
+                                        }
+                                    }
+                                    div { class: "c-title",
                                         button {
                                             class: "etitle sm",
                                             r#type: "button",
-                                            style: "min-height: 28px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap",
                                             aria_label: "Edit {card.title}",
                                             onclick: move |_| open_edit(st, &edit, false),
                                             "{card.title}"
                                         }
                                         if let Some(e) = epic {
-                                            span { style: "color: var(--faint); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap", "{e}" }
+                                            span { class: "c-epic", "{e}" }
                                         }
                                     }
                                     div { class: "tl-date",
                                         span { "{date_text}" }
                                         if row.overdue { span { style: "color: var(--warn); font-size: 12px; font-weight: 600", "Overdue" } }
                                     }
-                                    StatePill { state: card.state.clone(), category: cat, color }
-                                    Assignee { id, person: card.assigned_to.clone(), title: card.title.clone() }
+                                    span { class: "c-state", StatePill { state: card.state.clone(), category: cat, color } }
+                                    span { class: "c-who", Assignee { id, person: card.assigned_to.clone(), title: card.title.clone() } }
                                 }
                                 div { class: "tl-gap" }
                                 div { class: "tl-track", onpointerdown: start_pan,
