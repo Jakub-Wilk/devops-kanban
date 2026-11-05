@@ -963,7 +963,7 @@ fn CardView(
                 // Full description and every tag: unfold as the card opens.
                 div { class: "unfold", "inert": if expanded { None } else { Some("true") },
                     div { class: "fold-in",
-                        if let Some(html) = desc_html { div { class: "card-desc", draggable: "false", dangerous_inner_html: "{html}" } }
+                        if let Some(html) = desc_html { div { class: "card-desc", dangerous_inner_html: "{html}" } }
                         if !all_tags.is_empty() {
                             div { class: "tags",
                                 for t in all_tags { span { key: "{t}", class: "tag", "{t}" } }

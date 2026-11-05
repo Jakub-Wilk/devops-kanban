@@ -86,9 +86,55 @@ fn App() -> Element {
         Toasts {}
         TooltipLayer {}
         AvatarServer {}
+        SelectionGuard {}
         TimeKeeper {}
         WindowKeeper {}
     }
+}
+
+/// Text regions inside draggable cards and rows (`.selectable`, the expanded card description)
+/// can't be selected by default: pressing in them starts a drag of the card, whatever their own
+/// `draggable` says. While the mouse is down in one, this turns the draggable ancestor off, so
+/// the press selects text instead (turned back on at mouse up); a press on already-selected text
+/// starts a new selection rather than dragging it, and any drag starting there is cancelled.
+const SELECTION_JS: &str = r#"
+if (window.__selectionGuard) return;
+window.__selectionGuard = true;
+const regionOf = (t) => {
+  const el = t && (t.nodeType === 1 ? t : t.parentElement);
+  return el && el.closest ? el.closest('.selectable, .card-desc') : null;
+};
+document.addEventListener('mousedown', (e) => {
+  if (e.button !== 0) return;
+  const region = regionOf(e.target);
+  const host = region && region.closest('[draggable="true"]');
+  if (!host) return;
+  // Pressing on selected text would drag that text (and with it the card): a single press
+  // starts a new selection instead. Double and triple clicks keep selecting words and lines.
+  if (e.detail === 1) window.getSelection()?.removeAllRanges();
+  host.setAttribute('draggable', 'false');
+  const restore = () => {
+    host.setAttribute('draggable', 'true');
+    document.removeEventListener('mouseup', restore, true);
+  };
+  document.addEventListener('mouseup', restore, true);
+}, true);
+// Whatever drag still starts in such a region never reaches the card.
+document.addEventListener('dragstart', (e) => {
+  const region = regionOf(e.target);
+  if (region && region.closest('[draggable]')) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+}, true);
+"#;
+
+#[component]
+fn SelectionGuard() -> Element {
+    use_hook(|| {
+        let _ = document::eval(SELECTION_JS);
+    });
+    rsx! {}
 }
 
 /// Remembers whether the window is maximised, so the next launch opens the same way. Saved when

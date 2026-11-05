@@ -332,7 +332,10 @@ main.panel.fill .board-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; -
 .card .tag.more { color: var(--faint); border-style: dashed; }
 /* Description: the first line while collapsed, all of it when expanded. */
 .card .desc-line { margin: 0; font-size: var(--meta); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.card .card-desc { font-size: var(--meta); line-height: 1.5; color: var(--text-2); overflow-wrap: anywhere; user-select: text; cursor: auto; }
+.card .card-desc { font-size: var(--meta); line-height: 1.5; color: var(--text-2); overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; cursor: text; }
+/* Opt-in selectable text inside draggable things; main.rs `SELECTION_JS` keeps a press in it
+   from starting a drag. */
+.selectable { user-select: text; -webkit-user-select: text; cursor: text; }
 .card .card-desc > :first-child { margin-top: 0; }
 .card .card-desc > :last-child { margin-bottom: 0; }
 .card .card-desc p, .card .card-desc div { margin: 0 0 6px; }
