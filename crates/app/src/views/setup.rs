@@ -18,19 +18,33 @@ pub fn Setup() -> Element {
     let st = use_app();
     let connected = st.client.read().is_some();
 
-    use_effect(move || {
+    // Decided on the first render, not in an effect: when the default board opens straight away,
+    // this screen never paints (no flash of the setup form on launch).
+    let auto_open = use_hook(|| {
         let s = st.settings.peek().clone();
-        if st.client.read().is_some()
+        if st.client.peek().is_some()
             && !AUTO_OPENED.swap(true, Ordering::Relaxed)
             && let (Some(project), Some(team)) = (s.default_project, s.default_team)
         {
-            navigator().replace(Route::Board {
+            Some(Route::Board {
                 project,
                 team,
                 board: s.default_board.unwrap_or_else(|| "Stories".into()),
-            });
+            })
+        } else {
+            None
         }
     });
+    let target = auto_open.clone();
+    use_effect(move || {
+        if let Some(route) = target.clone() {
+            navigator().replace(route);
+        }
+    });
+    if auto_open.is_some() {
+        // Just the app background until the board takes over.
+        return rsx! { div { class: "app" } };
+    }
 
     rsx! {
         div { class: "center",

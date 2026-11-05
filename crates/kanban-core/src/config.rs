@@ -32,6 +32,11 @@ pub struct Settings {
     pub timeline_info_width: Option<u32>,
     /// The window was maximised when last used; the next launch opens maximised.
     pub window_maximized: bool,
+    /// The window's normal (not maximised) inner size, logical px. Written by the app.
+    pub window_size: Option<[u32; 2]>,
+    /// The inner size it had when maximised, logical px. A window that opens maximised is
+    /// created at this size, so its webview never draws at the normal size first.
+    pub maximized_size: Option<[u32; 2]>,
     /// Tag marking one-off work items: with it set, the item dialog offers a checkbox that adds
     /// the tag and creates the item without a parent (the only way to do so). Empty = off.
     pub one_off_tag: String,
@@ -242,6 +247,8 @@ impl Default for Settings {
             last_view: None,
             timeline_info_width: None,
             window_maximized: false,
+            window_size: None,
+            maximized_size: None,
             api: ApiSettings::default(),
             time_tracking: TimeTrackingSettings::default(),
             appearance: AppearanceSettings::default(),
