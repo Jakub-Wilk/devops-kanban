@@ -158,10 +158,24 @@ pub fn DateLabel(date: Option<Date>, #[props(default)] open: bool) -> Element {
     }
 }
 
-/// A work item type's icon in its colour. `icon` is the ADO icon id (`icon_book`, …); unknown or
-/// missing ids show a coloured dot. `color` is the type colour without `#`.
+/// A work item type's icon. `src` is Azure DevOps's own icon in the type colour (a `data:` URI,
+/// shown as an image so its SVG can't run anything); without it the app draws `icon` (the ADO
+/// icon id, `icon_book`, …) itself, and unknown ids show a coloured dot. `color` is the type
+/// colour without `#`.
 #[component]
-pub fn TypeIcon(icon: Option<String>, color: String, label: String) -> Element {
+pub fn TypeIcon(
+    icon: Option<String>,
+    src: Option<String>,
+    color: String,
+    label: String,
+) -> Element {
+    if let Some(src) = src {
+        return rsx! {
+            span { class: "ty ado", role: "img", aria_label: "{label}", "data-tip": "{label}",
+                img { src: "{src}", alt: "", draggable: "false" }
+            }
+        };
+    }
     let svg = icon.as_deref().and_then(icons::type_icon);
     let class = if svg.is_some() { "ty" } else { "ty dot" };
     rsx! {

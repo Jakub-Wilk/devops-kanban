@@ -37,7 +37,7 @@ pub struct Settings {
     pub one_off_tag: String,
     pub api: ApiSettings,
     pub time_tracking: TimeTrackingSettings,
-    /// How List rows and kanban cards are drawn (Settings › Appearance).
+    /// How List rows and kanban cards are drawn (*View options* next to the board tabs).
     pub appearance: AppearanceSettings,
     /// Per-board UI preferences, keyed `"<project>/<team>/<board>"`.
     pub boards: BTreeMap<String, BoardPrefs>,
@@ -94,11 +94,28 @@ impl AccentSide {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AppearanceSettings {
     pub list: ListStyle,
     pub kanban: CardStyle,
+    /// Timeline rows (their info column), with the List's options.
+    pub timeline: ListStyle,
+}
+
+impl Default for AppearanceSettings {
+    fn default() -> Self {
+        Self {
+            list: ListStyle::default(),
+            kanban: CardStyle::default(),
+            // The timeline's original look: plain rows.
+            timeline: ListStyle {
+                tint: false,
+                accent: AccentSide::Off,
+                icon: false,
+            },
+        }
+    }
 }
 
 /// List rows. The tint and the accent bar use the work item type's colour.
@@ -122,11 +139,13 @@ impl Default for ListStyle {
     }
 }
 
-/// Kanban cards. The accent bar uses the card's state colour.
+/// Kanban cards. The accent bar and the tint use the card's state colour.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct CardStyle {
     pub accent: AccentSide,
+    /// Lean each card's background towards its state colour (the accent bar's colour).
+    pub tint: bool,
     /// The column under the mouse widens and the others narrow (same total width).
     pub hover_widen: bool,
     /// Cards open while hovered, and a pin (instead of the expand chevron) keeps a card open at
@@ -447,6 +466,9 @@ mod tests {
         assert_eq!(old.appearance.list.accent, AccentSide::Left);
         assert!(!old.appearance.list.icon);
         assert_eq!(old.appearance.kanban.accent, AccentSide::Left);
+        assert!(!old.appearance.kanban.tint);
+        assert!(!old.appearance.timeline.tint);
+        assert_eq!(old.appearance.timeline.accent, AccentSide::Off);
         assert!(!old.appearance.kanban.hover_widen);
         assert!(!old.appearance.kanban.hover_open);
 

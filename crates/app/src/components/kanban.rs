@@ -793,6 +793,11 @@ fn CardView(
         .as_ref()
         .is_some_and(|t| t.work_item == id);
     let accent = st.settings.read().appearance.kanban.accent.class();
+    let tint = if st.settings.read().appearance.kanban.tint {
+        " tint"
+    } else {
+        ""
+    };
     let (category, color) = state;
     let edit = card.clone();
     let parent = card.clone();
@@ -802,7 +807,7 @@ fn CardView(
         None => st.card_open.read().contains(&id),
     };
     let class = format!(
-        "card {accent}{}{}{}{}{}",
+        "card {accent}{tint}{}{}{}{}{}",
         if expanded { " open" } else { "" },
         if pinned { " pinned" } else { "" },
         if dragging { " dragging" } else { "" },

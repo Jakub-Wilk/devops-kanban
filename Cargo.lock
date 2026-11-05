@@ -2452,6 +2452,7 @@ version = "0.1.0"
 dependencies = [
  "ado-client",
  "ammonia",
+ "base64 0.22.1",
  "directories",
  "keyring",
  "serde",

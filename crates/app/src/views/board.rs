@@ -12,6 +12,7 @@ use crate::components::icons;
 use crate::components::kanban::Kanban;
 use crate::components::time::TimerChip;
 use crate::components::timeline::Timeline;
+use crate::components::view_options::{ViewOptions, ViewTab};
 use crate::components::widgets::{Avatar, Icon};
 use crate::routes::Route;
 use crate::services;
@@ -143,6 +144,15 @@ pub fn Board(project: String, team: String, board: String) -> Element {
                         TabButton { label: "List", icon: icons::LIST, on: current == Tab::List, count: counts.map(|c| c.0), onclick: move |_| set_tab(Tab::List) }
                         TabButton { label: "Kanban", icon: icons::KANBAN, on: current == Tab::Kanban, count: counts.map(|c| c.1), onclick: move |_| set_tab(Tab::Kanban) }
                         TabButton { label: "Timeline", icon: icons::TIMELINE, on: current == Tab::Timeline, count: counts.map(|c| c.2), onclick: move |_| set_tab(Tab::Timeline) }
+                    }
+                    // Right after the tabs, so it's in the same place on each; it shows the
+                    // current view's options (none for the timeline).
+                    ViewOptions {
+                        tab: match current {
+                            Tab::List => ViewTab::List,
+                            Tab::Kanban => ViewTab::Kanban,
+                            Tab::Timeline => ViewTab::Timeline,
+                        },
                     }
                     div { class: "spacer" }
                     TimerChip {}

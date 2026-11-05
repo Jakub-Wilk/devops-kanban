@@ -1,9 +1,11 @@
-//! Settings editor (see docs/settings.md), including the 7pace time tracking token.
+//! Settings editor (see docs/settings.md), including the 7pace time tracking token. How rows and
+//! cards look is set per view, under *View options* in the board's top bar
+//! (`components/view_options.rs`).
 
 use dioxus::prelude::*;
 
 use crate::components::icons;
-use crate::components::widgets::{Icon, Prio, StatePill, TypeIcon};
+use crate::components::widgets::Icon;
 use crate::routes::Route;
 use crate::services;
 use crate::state::use_app;
@@ -28,15 +30,12 @@ pub fn Settings() -> Element {
     };
     rsx! {
         div { class: "app",
-            header { class: "topbar",
-                div { class: "wrap",
-                    div { class: "spacer" }
-                    Link { class: "ghost", to: back, Icon { svg: icons::BACK } "Back to board" }
-                }
-            }
             div { class: "scroll",
                 main { class: "wrap panel settings",
-                    h1 { style: "margin: 0; font-size: 26px; letter-spacing: -0.02em", "Settings" }
+                    div { class: "settings-head",
+                        h1 { "Settings" }
+                        Link { class: "ghost", to: back, Icon { svg: icons::BACK } "Back to board" }
+                    }
                     div { class: "list", style: "padding: 4px 20px",
                         div { class: "row",
                             div { strong { "Organization" } p { "{s.organization}" } }
@@ -125,202 +124,7 @@ pub fn Settings() -> Element {
                             }
                         }
                     }
-                    AppearanceSection {}
                     TimeTrackingSettings {}
-                }
-            }
-        }
-    }
-}
-
-/// List row and kanban card style, each with a preview built from sample items, so it works
-/// before any board is loaded.
-#[component]
-fn AppearanceSection() -> Element {
-    let mut st = use_app();
-    let a = st.settings.read().appearance.clone();
-    let mut set = move |f: &dyn Fn(&mut kanban_core::config::AppearanceSettings)| {
-        f(&mut st.settings.write().appearance);
-        services::save_settings(st);
-    };
-    let list = a.list.clone();
-    let card_accent = a.kanban.accent;
-    let hover_widen = a.kanban.hover_widen;
-    let hover_open = a.kanban.hover_open;
-    // (id, depth, type, ADO icon id, type colour, priority, title, state, state colour, owner)
-    let rows = [
-        (
-            104812,
-            0,
-            "Epic",
-            "icon_crown",
-            "FF7B00",
-            1,
-            "Print pipeline rewrite",
-            "Active",
-            "007acc",
-            "JW",
-        ),
-        (
-            104830,
-            2,
-            "User Story",
-            "icon_book",
-            "009CCC",
-            1,
-            "Render regional issue variants in parallel",
-            "Active",
-            "007acc",
-            "MK",
-        ),
-        (
-            104901,
-            3,
-            "Task",
-            "icon_clipboard",
-            "F2CB1D",
-            2,
-            "Split the renderer queue per region",
-            "Active",
-            "007acc",
-            "MK",
-        ),
-    ];
-    let cards = [
-        (
-            104830,
-            1,
-            "Render regional issue variants in parallel",
-            "007acc",
-            "12 Nov",
-            false,
-        ),
-        (
-            104841,
-            2,
-            "Retry failed PDF exports with backoff",
-            "cc293d",
-            "3 Nov · 2 days late",
-            true,
-        ),
-    ];
-    let row_class = format!(
-        "ap-row{} {}",
-        if list.tint { " tint" } else { "" },
-        list.accent.class()
-    );
-    let card_class = format!("card {}", card_accent.class());
-    rsx! {
-        h2 { style: "margin: 12px 0 0; font-size: 18px; letter-spacing: -0.01em", "Appearance" }
-        div { class: "list", style: "padding: 4px 20px",
-            h3 { class: "ap-sub", "List rows" }
-            div { class: "row",
-                div { strong { "Background tint" } p { "Lean each row's background towards its work item type colour." } }
-                input {
-                    r#type: "checkbox",
-                    style: "width: 18px; height: 18px; accent-color: var(--accent)",
-                    aria_label: "Background tint",
-                    checked: list.tint,
-                    onchange: move |e| set(&|a| a.list.tint = e.checked()),
-                }
-            }
-            div { class: "row",
-                div { strong { "Accent bar" } p { "A 4 px bar in the type colour on one edge of each row." } }
-                AccentPicker { label: "List accent bar", value: list.accent, on_pick: move |v| set(&|a| a.list.accent = v) }
-            }
-            div { class: "row",
-                div { strong { "Type icon" } p { "The work item type's icon from Azure DevOps, before the title." } }
-                input {
-                    r#type: "checkbox",
-                    style: "width: 18px; height: 18px; accent-color: var(--accent)",
-                    aria_label: "Type icon",
-                    checked: list.icon,
-                    onchange: move |e| set(&|a| a.list.icon = e.checked()),
-                }
-            }
-            div { class: "ap-prev",
-                span { class: "cap", "Preview" }
-                div { class: "ap-box", aria_hidden: "true",
-                    for (id, depth, ty, icon, tc, prio, title, state, sc, who) in rows {
-                        div { key: "{id}", class: "{row_class}", style: "--tc: #{tc}",
-                            span { class: "id", "{id}" }
-                            Prio { priority: Some(prio) }
-                            span { class: "ttl", style: "padding-left: {depth * 24}px",
-                                if list.icon { TypeIcon { icon: Some(icon.to_owned()), color: tc.to_owned(), label: ty.to_owned() } }
-                                span { "{title}" }
-                            }
-                            StatePill { state: state.to_owned(), category: kanban_core::StateCategory::InProgress, color: sc.to_owned() }
-                            span { class: "av", "{who}" }
-                        }
-                    }
-                }
-            }
-            h3 { class: "ap-sub sep", "Kanban cards" }
-            div { class: "row",
-                div { strong { "Accent bar" } p { "A 4 px bar in the card's state colour on one edge of the card." } }
-                AccentPicker { label: "Kanban accent bar", value: card_accent, on_pick: move |v| set(&|a| a.kanban.accent = v) }
-            }
-            div { class: "row",
-                div {
-                    strong { "Widen the hovered column" }
-                    p { "The column under the mouse widens and the others narrow, so the board keeps its width. The done column stays as it is." }
-                }
-                input {
-                    r#type: "checkbox",
-                    style: "width: 18px; height: 18px; accent-color: var(--accent)",
-                    aria_label: "Widen the hovered column",
-                    checked: hover_widen,
-                    onchange: move |e| set(&|a| a.kanban.hover_widen = e.checked()),
-                }
-            }
-            div { class: "row",
-                div {
-                    strong { "Open cards on hover" }
-                    p { "Cards open while the mouse is on them. A pin replaces the expand button and keeps a card open at the top of its column." }
-                }
-                input {
-                    r#type: "checkbox",
-                    style: "width: 18px; height: 18px; accent-color: var(--accent)",
-                    aria_label: "Open cards on hover",
-                    checked: hover_open,
-                    onchange: move |e| set(&|a| a.kanban.hover_open = e.checked()),
-                }
-            }
-            div { class: "ap-prev",
-                span { class: "cap", "Preview" }
-                div { class: "ap-cards", aria_hidden: "true",
-                    for (id, prio, title, sc, date, late) in cards {
-                        article { key: "{id}", class: "{card_class}", style: "--sc: #{sc}",
-                            div { class: "top", span { span { class: "id", "{id}" } Prio { priority: Some(prio) } } }
-                            span { class: "etitle sm", style: "min-height: 0", "{title}" }
-                            div { class: "bottom",
-                                span { class: "av", "JW" }
-                                span { class: if late { "date late" } else { "date" }, Icon { svg: icons::CALENDAR } "{date}" }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-#[component]
-fn AccentPicker(
-    label: &'static str,
-    value: kanban_core::config::AccentSide,
-    on_pick: EventHandler<kanban_core::config::AccentSide>,
-) -> Element {
-    rsx! {
-        div { class: "seg", role: "group", aria_label: "{label}",
-            for side in kanban_core::config::AccentSide::ALL {
-                button {
-                    key: "{side.label()}",
-                    class: if side == value { "on" } else { "" },
-                    r#type: "button",
-                    aria_pressed: "{side == value}",
-                    onclick: move |_| on_pick.call(side),
-                    "{side.label()}"
                 }
             }
         }

@@ -320,3 +320,13 @@ fn visible_states_skip_hidden_columns() {
     assert!(rest.iter().all(|(_, c)| *c != first.name));
     assert!(board.visible_states("No such type", &[]).is_empty());
 }
+
+#[test]
+fn type_icon_svg_becomes_data_uri() {
+    use kanban_core::workspace::svg_data_uri;
+    let uri = svg_data_uri("<svg xmlns=\"http://www.w3.org/2000/svg\"/>").unwrap();
+    assert!(uri.starts_with("data:image/svg+xml;base64,"));
+    assert!(svg_data_uri("<?xml version=\"1.0\"?>\n<svg/>").is_some());
+    // A sign-in page or an error body is not an icon.
+    assert!(svg_data_uri("<html><body>Sign in</body></html>").is_none());
+}

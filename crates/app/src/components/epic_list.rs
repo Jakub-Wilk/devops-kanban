@@ -31,6 +31,8 @@ struct RowData {
     state_color: String,
     type_color: String,
     type_icon: Option<String>,
+    /// The icon as Azure DevOps draws it (`data:` URI), when fetched.
+    type_icon_src: Option<String>,
     /// (done, total) of the descendants, for rows above the task level.
     progress: Option<(usize, usize)>,
     /// Number of direct children (for the badge on a collapsed row).
@@ -362,7 +364,7 @@ fn ListRowView(
                     span { class: "twirl-space" }
                 }
                 if icon {
-                    TypeIcon { icon: d.type_icon.clone(), color: d.type_color.clone(), label: card.work_item_type.clone() }
+                    TypeIcon { icon: d.type_icon.clone(), src: d.type_icon_src.clone(), color: d.type_color.clone(), label: card.work_item_type.clone() }
                 } else if !root {
                     span { class: "type", "{card.work_item_type}" }
                 }
@@ -516,6 +518,7 @@ fn row_data(
                 state_color: ws.state_color(card),
                 type_color: ws.type_color(&card.work_item_type),
                 type_icon: ws.type_icon(&card.work_item_type),
+                type_icon_src: ws.type_icon_src(&card.work_item_type),
                 progress,
                 kids: kids.get(&r.id).copied().unwrap_or(0),
                 add_types,

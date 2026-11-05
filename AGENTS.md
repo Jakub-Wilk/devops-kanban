@@ -7,7 +7,8 @@ Status: **first implementation**. The UI follows the "DevOps Board Manager" desi
 full backlog tree in aligned columns, kanban, timeline, two-column item dialog with description,
 tags and a searchable parent; dark "Graphite" theme, Inter with IBM Plex Mono for IDs and times).
 Keep new UI consistent with `crates/app/assets/main.css` and `dialogs.css` (use the spacing
-`--s1…--s6` and radius `--r-sm/md/lg` tokens) and don't redesign without being asked. Row and card style is user-configurable (`appearance` in `docs/settings.md`). 7pace time
+`--s1…--s6` and radius `--r-sm/md/lg` tokens) and don't redesign without being asked. Row and card style is user-configurable per view (*View options* next to the tabs,
+`components/view_options.rs`; `appearance` in `docs/settings.md`). 7pace time
 tracking is on the kanban only (timer and add time in the card header, the user's entries in the
 card's expandable details, fetched in bulk for the shown cards) plus a compact running-timer chip in
 the top bar; Stop opens the time dialog and applies it to the worklog 7pace creates. The app side

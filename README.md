@@ -13,8 +13,8 @@ straight back to Azure DevOps or 7pace. There is no server and no separate datab
 > Items are created and edited in a two-column dialog (searchable parent, tags, description, state
 > with the column it moves to, and a list of unsaved changes). 7pace time tracking on kanban
 > cards: start/stop the timer (Stop lets you adjust what gets logged), add time, and edit your
-> entries in the card's expandable details. Row and card style (tint, accent bar, type icons) is set in
-> *Settings › Appearance*.
+> entries in the card's expandable details. Row and card style (tint, accent bar, type icons, hover behaviour) is set
+> per view under *View options*, next to the view tabs.
 
 ## Prerequisites
 

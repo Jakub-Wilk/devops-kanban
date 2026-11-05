@@ -1,5 +1,5 @@
 //! Reusable UI components: badges and pills, the filter bar, the three board tabs (epic list,
-//! kanban, timeline), the item and time dialogs with their pickers, 7pace time tracking, toasts and the tooltip.
+//! kanban, timeline), the item and time dialogs with their pickers, the per-view "View options", 7pace time tracking, toasts and the tooltip.
 
 pub mod avatars;
 pub mod epic_list;
@@ -14,4 +14,5 @@ pub mod time;
 pub mod timeline;
 pub mod toast;
 pub mod tooltip;
+pub mod view_options;
 pub mod widgets;

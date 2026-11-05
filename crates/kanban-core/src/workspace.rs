@@ -63,6 +63,10 @@ pub struct Workspace {
     /// Work item type → ADO icon id (`icon_book`, …), for the optional List type icons.
     #[serde(default)]
     pub type_icons: HashMap<String, String>,
+    /// Type name → its Azure DevOps icon in the type colour, as a `data:image/svg+xml` URI
+    /// (fetched at load; kept in the cache). Missing ones fall back to the app's own drawings.
+    #[serde(default)]
+    pub type_icon_svgs: HashMap<String, String>,
     /// Newest `System.ChangedDate` seen; the next delta sync starts here.
     pub synced_to: Option<OffsetDateTime>,
 }
@@ -209,8 +213,10 @@ impl Workspace {
                 .map(|t| type_colors(t))
                 .unwrap_or_default(),
             type_icons: types.as_ref().map(|t| type_icons(t)).unwrap_or_default(),
+            type_icon_svgs: HashMap::new(),
             synced_to: None,
         };
+        ws.type_icon_svgs = fetch_type_icons(client, &ws.type_icons, &ws.type_colors).await;
         ws.upsert(&dtos);
         ws.synced_to = ws.cards.values().filter_map(|c| c.changed_date).max();
         Ok(ws)
@@ -305,6 +311,11 @@ impl Workspace {
         self.type_icons.get(work_item_type).cloned()
     }
 
+    /// The type's icon as Azure DevOps draws it (a `data:` URI), when it could be fetched.
+    pub fn type_icon_src(&self, work_item_type: &str) -> Option<String> {
+        self.type_icon_svgs.get(work_item_type).cloned()
+    }
+
     /// The type's ADO color (hex without `#`), gray when unknown.
     pub fn type_color(&self, work_item_type: &str) -> String {
         self.type_colors
@@ -390,6 +401,48 @@ pub fn parent_types(
         .iter()
         .flat_map(|l| l.work_item_types.iter().cloned())
         .collect()
+}
+
+/// Fetches each type's icon in its colour, concurrently. Types whose icon fails keep none (the
+/// app draws its own); a few small requests per load.
+async fn fetch_type_icons(
+    client: &AdoClient,
+    icons: &HashMap<String, String>,
+    colors: &HashMap<String, String>,
+) -> HashMap<String, String> {
+    let mut set = JoinSet::new();
+    for (ty, icon) in icons {
+        let (client, ty, icon) = (client.clone(), ty.clone(), icon.clone());
+        let color = colors.get(&ty).cloned().unwrap_or_else(|| "6b7686".into());
+        set.spawn(async move { (ty, client.work_item_icon_svg(&icon, &color).await) });
+    }
+    let mut out = HashMap::new();
+    while let Some(joined) = set.join_next().await {
+        match joined {
+            Ok((ty, Ok(svg))) => match svg_data_uri(&svg) {
+                Some(uri) => {
+                    out.insert(ty, uri);
+                }
+                None => tracing::warn!(work_item_type = %ty, "type icon is not SVG"),
+            },
+            Ok((ty, Err(e))) => tracing::warn!(work_item_type = %ty, error = %e, "no type icon"),
+            Err(_) => {}
+        }
+    }
+    out
+}
+
+/// `svg` as a `data:image/svg+xml;base64,…` URI, or `None` if it isn't SVG. Shown through an
+/// `<img>`, which never runs scripts inside the SVG.
+pub fn svg_data_uri(svg: &str) -> Option<String> {
+    use base64::Engine;
+    let t = svg.trim_start();
+    (t.starts_with("<svg") || (t.starts_with("<?xml") && t.contains("<svg"))).then(|| {
+        format!(
+            "data:image/svg+xml;base64,{}",
+            base64::engine::general_purpose::STANDARD.encode(t)
+        )
+    })
 }
 
 /// Type name → color (hex without `#`, lowercase).

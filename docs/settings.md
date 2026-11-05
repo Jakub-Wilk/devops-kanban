@@ -41,7 +41,8 @@ The Setup view creates this file on first run. Start from
 
 ### Appearance
 
-Set in *Settings › Appearance*, which shows a preview of each option. Older configs without these
+Set per view under *View options*, the button right after the List / Kanban / Timeline
+tabs; changes show on the view straight away. Older configs without these
 keys get the defaults, which match the original look.
 
 | Key                          | Type   | Default | Meaning |
@@ -49,6 +50,10 @@ keys get the defaults, which match the original look.
 | `appearance.list.tint`       | bool   | `true`  | List rows lean their background towards the work item type colour |
 | `appearance.list.accent`     | string | `left`  | 4 px bar in the type colour on List rows: `left`, `right` or `off` |
 | `appearance.list.icon`       | bool   | `false` | The type's icon (as set in Azure DevOps) before each List title |
+| `appearance.timeline.tint`   | bool   | `false` | Timeline rows: the same three options as the List, on the row's info column. Defaults keep the plain look |
+| `appearance.timeline.accent` | string | `off`   | 〃 accent bar: `left`, `right` or `off` |
+| `appearance.timeline.icon`   | bool   | `false` | 〃 type icon before the title |
+| `appearance.kanban.tint`     | bool   | `false` | Kanban cards lean their background towards their state colour |
 | `appearance.kanban.accent`   | string | `left`  | 4 px bar in the state colour on kanban cards: `left`, `right` or `off` |
 | `appearance.kanban.hover_widen` | bool | `false` | The column under the mouse widens while the others narrow (same total width); the done column never widens and resets to equal widths |
 | `appearance.kanban.hover_open`  | bool | `false` | Cards open as soon as they are hovered and close shortly after the mouse leaves; a pin replaces the expand chevron and keeps a card open at the top of its column |

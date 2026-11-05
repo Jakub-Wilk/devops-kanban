@@ -474,6 +474,12 @@ main.panel.fill .board-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; -
 .twirl.sm .count { font-size: 11px; padding: 0 5px; }
 .twirl-space { flex: none; width: 24px; }
 .tl-row.child .tl-info { padding-left: 52px; }
+/* Row style (View options › Timeline rows): on the info column, like the List's rows. */
+.tl-row.tint .tl-info { background: color-mix(in srgb, var(--tc, transparent) 9%, var(--panel)); }
+.tl-row.child.tint .tl-info { background: color-mix(in srgb, var(--tc, transparent) 7%, var(--panel)); }
+.tl-row.tint:hover .tl-info { background: color-mix(in srgb, var(--tc, transparent) 15%, var(--panel)); }
+.tl-row.acc-left .tl-info { box-shadow: inset 4px 0 0 var(--tc, transparent); }
+.tl-row.acc-right .tl-info { box-shadow: inset -4px 0 0 var(--tc, transparent); }
 .tl-row.child .etitle { font-size: 13px; color: var(--text-2); }
 .tl-today { position: absolute; z-index: 1; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--accent); opacity: .75; }
 .tl-today-cap { position: absolute; z-index: 4; bottom: 0; width: 0; height: 0; margin-left: -6px; border-left: 6px solid transparent; border-right: 6px solid transparent; border-bottom: 8px solid var(--accent); }
@@ -518,21 +524,23 @@ main.panel.fill .board-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; -
 .steps { display: flex; gap: var(--s2); }
 .steps i { height: 4px; flex: 1; border-radius: 2px; background: var(--chip); transition: background .3s; }
 .steps i.on { background: var(--accent); }
-.settings { max-width: 720px; }
+.settings { width: 100%; max-width: 720px; margin-left: auto; margin-right: auto; }
+.settings-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s4); }
+.settings-head h1 { margin: 0; font-size: 26px; letter-spacing: -0.02em; }
 .settings .row { display: flex; align-items: center; justify-content: space-between; gap: var(--s4); padding: var(--s4) 0; border-bottom: 1px solid var(--line); }
 .settings .row:last-child { border-bottom: 0; }
 .settings .row p { margin: 2px 0 0; color: var(--faint); font-size: 13px; }
 .settings .row p.ok { color: var(--ok); }
 .settings .row p.bad { color: var(--danger); }
 
-/* ---------- appearance (Settings › Appearance; config `appearance.*`) ---------- */
+/* ---------- appearance (View options in the board top bar; config `appearance.*`) ---------- */
 /* List rows: --tc is the work item type colour. */
 .tint { background: color-mix(in srgb, var(--tc, transparent) 9%, var(--panel)); }
 .lrow.child.tint { background: color-mix(in srgb, var(--tc, transparent) 7%, var(--surface)); }
 .tint:hover, .lrow.child.tint:hover { background: color-mix(in srgb, var(--tc, transparent) 15%, var(--panel)); }
-.ehead.acc-left, .crow.acc-left, .lrow.acc-left, .ap-row.acc-left { box-shadow: inset 4px 0 0 var(--tc, transparent); }
-.ehead.acc-right, .crow.acc-right, .lrow.acc-right, .ap-row.acc-right { box-shadow: inset -4px 0 0 var(--tc, transparent); }
-.ehead.acc-off, .crow.acc-off, .lrow.acc-off, .ap-row.acc-off { box-shadow: none; }
+.ehead.acc-left, .crow.acc-left, .lrow.acc-left { box-shadow: inset 4px 0 0 var(--tc, transparent); }
+.ehead.acc-right, .crow.acc-right, .lrow.acc-right { box-shadow: inset -4px 0 0 var(--tc, transparent); }
+.ehead.acc-off, .crow.acc-off, .lrow.acc-off { box-shadow: none; }
 /* Kanban cards: --sc is the state colour. Left is the base .card style. */
 .card.acc-right { box-shadow: inset -4px 0 0 var(--sc, transparent); padding-left: var(--s4); padding-right: var(--s4); }
 .card.acc-right:hover { box-shadow: inset -4px 0 0 var(--sc, transparent), 0 6px 18px rgba(0, 0, 0, .4); }
@@ -541,20 +549,24 @@ main.panel.fill .board-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; -
 /* Type icon: --tc tints a small rounded square. */
 .ty { flex: none; width: 20px; height: 20px; border-radius: var(--r-sm); display: inline-flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--tc, #6B7686) 24%, var(--panel)); color: color-mix(in srgb, var(--tc, #6B7686) 55%, #fff); }
 .ty svg { width: 12px; height: 12px; }
+/* Azure DevOps's own icon, already in the type colour: no tinted square behind it. */
+.ty.ado { background: none; }
+.ty.ado img { width: 16px; height: 16px; display: block; }
 .ty.dot::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--tc, #6B7686); }
 /* Settings previews */
-.settings .ap-sub { margin: var(--s4) 0 0; font-size: 12px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--faint); }
-.settings .ap-sub.sep { border-top: 1px solid var(--line); padding-top: var(--s4); }
-.ap-prev { display: flex; flex-direction: column; gap: var(--s2); padding: var(--s3) 0 var(--s4); }
-.ap-prev .cap { font-size: 12px; color: var(--faint); }
-.ap-box { border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; background: var(--panel); }
-.ap-row { display: grid; grid-template-columns: 64px 30px minmax(0, 1fr) auto 28px; align-items: center; column-gap: var(--s3); min-height: 44px; padding: 0 var(--s4); border-bottom: 1px solid var(--line); background: var(--panel); }
-.ap-row:last-child { border-bottom: 0; }
-.ap-row .ttl { display: flex; align-items: center; gap: var(--s2); min-width: 0; font-size: 14px; }
-.ap-row .ttl span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ap-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 260px)); gap: var(--s3); padding: var(--s3); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--panel); }
-.ap-cards .card { cursor: default; animation: none; }
-.ap-cards .card:hover { transform: none; }
+/* Kanban card tint: towards the state colour, like the accent bar. */
+.card.tint { background: color-mix(in srgb, var(--sc, transparent) 10%, var(--raised)); }
+
+/* View options (components/view_options.rs): a popover under the button next to the tabs. */
+.ghost.viewbtn.on { border-color: var(--accent); background: rgba(120, 166, 255, .1); }
+.popover.viewopts { width: min(420px, calc(100vw - 32px)); max-height: calc(100vh - 96px); overflow-y: auto; padding: var(--s3) var(--s4); }
+.viewopts .vo-title { margin: var(--s1) 0 var(--s1); font-size: 12px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--faint); }
+.viewopts .vo-row { display: flex; align-items: center; justify-content: space-between; gap: var(--s4); padding: var(--s3) 0; border-bottom: 1px solid var(--line); cursor: default; }
+.viewopts label.vo-row { cursor: pointer; }
+.viewopts .vo-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.viewopts .vo-text small { color: var(--faint); font-size: 12px; line-height: 1.4; }
+.viewopts .vo-check { width: 18px; height: 18px; flex: none; accent-color: var(--accent); }
+.seg.sm button { min-height: 28px; padding: 0 var(--s3); font-size: 13px; }
 
 /* ---------- loading ---------- */
 .skel { border-radius: var(--r-md); background: linear-gradient(100deg, #1A1F27 30%, #232A34 50%, #1A1F27 70%); background-size: 220% 100%; animation: shimmer 1.3s linear infinite; }

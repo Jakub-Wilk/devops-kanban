@@ -193,6 +193,48 @@ impl AdoClient {
         url
     }
 
+    /// Sends a GET for a non-JSON resource (`accept`, e.g. `image/svg+xml`) and returns the body
+    /// as text. One attempt: callers use it for optional extras such as icons.
+    pub(crate) async fn send_text(
+        &self,
+        req: Request<'_>,
+        accept: &str,
+    ) -> Result<String, AdoError> {
+        let url = self.url(&req);
+        self.rate_limiter.wait().await;
+        tracing::debug!(path = url.path(), "ado request (text)");
+        let resp = self
+            .http
+            .request(req.method.clone(), url.clone())
+            .header(header::AUTHORIZATION, self.auth.authorization_header())
+            .header(header::ACCEPT, accept)
+            .send()
+            .await?;
+        let status = resp.status();
+        let retry_after = self.rate_limiter.observe(resp.headers());
+        let content_type = resp
+            .headers()
+            .get(header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or_default()
+            .to_owned();
+        let bytes = resp.bytes().await?;
+        if !status.is_success() || status == StatusCode::NON_AUTHORITATIVE_INFORMATION {
+            return Err(map_error(
+                status,
+                content_type.contains("json"),
+                &bytes,
+                retry_after,
+                None,
+            ));
+        }
+        // A sign-in page comes back as HTML with 200.
+        if content_type.contains("html") {
+            return Err(AdoError::Unauthorized);
+        }
+        Ok(String::from_utf8_lossy(&bytes).into_owned())
+    }
+
     /// Sends the request, retrying 5xx with backoff, and decodes the JSON response.
     pub(crate) async fn send<T: DeserializeOwned>(&self, req: Request<'_>) -> Result<T, AdoError> {
         let url = self.url(&req);

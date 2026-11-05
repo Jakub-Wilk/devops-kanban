@@ -39,6 +39,7 @@ of 401, so treat any non-JSON 203 as `Unauthorized`. Required PAT scope: `vso.wo
 | Create | `POST {p}/_apis/wit/workitems/${type}` | 7.1 | New card (JSON Patch) |
 | WIT types | `GET {p}/_apis/wit/workitemtypes` | 7.1 | Type colours. Large response (includes `xmlForm`), so fetched once per load |
 | WIT states | `GET {p}/_apis/wit/workitemtypes/{type}/states` | 7.1 | State colours and categories |
+| Type icons | `GET _apis/wit/workItemIcons/{icon}?color={hex}&v=2` with `Accept: image/svg+xml` | 7.1 | The type's icon (`icon.id` from WIT types) as SVG in the type colour; with JSON it returns only `{id, url}`. Fetched per type at load, kept in the cache, shown as an `<img>` `data:` URI so the SVG can't run anything |
 | Comments | `GET/POST {p}/_apis/wit/workItems/{id}/comments` | 7.1-preview.4 | Discussion |
 | Reorder | `PATCH {p}/{t}/_apis/work/workitemsorder` | 7.1 | Position within a column |
 

@@ -193,6 +193,12 @@ icon!(
     "2",
     "<path d=\"M9 4h6l-1 6 3 3v2H7v-2l3-3-1-6zM12 15v5\"/>"
 );
+icon!(
+    SLIDERS,
+    "18",
+    "2",
+    "<path d=\"M4 7h10M18 7h2M4 17h4M12 17h8\"/><circle cx=\"16\" cy=\"7\" r=\"2\"/><circle cx=\"10\" cy=\"17\" r=\"2\"/>"
+);
 icon!(CLOSE_12, "12", "2.4", "<path d=\"M6 6l12 12M18 6L6 18\"/>");
 icon!(EXTERNAL, "12", "2.2", "<path d=\"M7 17L17 7M9 7h8v8\"/>");
 icon!(

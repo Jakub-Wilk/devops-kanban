@@ -14,7 +14,7 @@ use kanban_core::{Card, CardId, StateCategory};
 use crate::components::filters::{ItemFilters, ItemTab, view_prefs};
 use crate::components::icons;
 use crate::components::item_dialog::{open_edit, open_new};
-use crate::components::widgets::{Assignee, Icon, Prio, StatePill, today};
+use crate::components::widgets::{Assignee, Icon, Prio, StatePill, TypeIcon, today};
 use crate::services;
 use crate::state::use_app;
 
@@ -93,6 +93,18 @@ pub fn Timeline() -> Element {
         .and_then(|l| l.default_type.clone())
         .unwrap_or_else(|| "User Story".into());
     let area = crate::components::epic_list::default_area(ws);
+    // Per type: colour, ADO icon id and fetched icon, for the row style (View options).
+    let type_look: std::collections::HashMap<String, (String, Option<String>, Option<String>)> = ws
+        .type_colors
+        .keys()
+        .map(|t| {
+            (
+                t.clone(),
+                (ws.type_color(t), ws.type_icon(t), ws.type_icon_src(t)),
+            )
+        })
+        .collect();
+    let style = st.settings.read().appearance.timeline.clone();
     drop(ws_guard);
 
     let today = today();
@@ -297,6 +309,10 @@ pub fn Timeline() -> Element {
                             .map(|x| format_long(layout.date_at(x)));
                         let date_text = card.target_date.map(format_long).unwrap_or_else(|| "No target date".into());
                         let edit = card.clone();
+                        let look = type_look
+                            .get(&card.work_item_type)
+                            .cloned()
+                            .unwrap_or_else(|| ("6b7686".to_owned(), None, None));
                         let start_x = row.marker_x.unwrap_or(0.0);
                         let mk_class = format!(
                             "mk{}{}",
@@ -314,7 +330,15 @@ pub fn Timeline() -> Element {
                             .map(|(l, w)| (l - sx, w))
                             .filter(|(l, w)| l + w > 0.0 && *l < track_w);
                         rsx! {
-                            div { key: "{id}", class: if row.parent.is_some() { "tl-row child" } else { "tl-row" }, style: "--i: {i}",
+                            div {
+                                key: "{id}",
+                                class: format!(
+                                    "tl-row{}{} {}",
+                                    if row.parent.is_some() { " child" } else { "" },
+                                    if style.tint { " tint" } else { "" },
+                                    style.accent.class()
+                                ),
+                                style: "--i: {i}; --tc: #{look.0}",
                                 div { class: "tl-info",
                                     if n_tasks > 0 {
                                         button {
@@ -335,6 +359,9 @@ pub fn Timeline() -> Element {
                                     }
                                     span { class: "id", style: "width: 56px", "{id}" }
                                     Prio { priority: card.priority }
+                                    if style.icon {
+                                        TypeIcon { icon: look.1.clone(), src: look.2.clone(), color: look.0.clone(), label: card.work_item_type.clone() }
+                                    }
                                     div { style: "flex: 1 1 0; min-width: 0; display: flex; flex-direction: column",
                                         button {
                                             class: "etitle sm",
