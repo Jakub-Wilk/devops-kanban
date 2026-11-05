@@ -290,6 +290,14 @@ main.panel.fill .board-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; -
 .col { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-lg); padding: var(--s3); display: flex; flex-direction: column; gap: var(--s3); min-height: 140px; transition: border-color .2s, background .2s, box-shadow .2s; animation: fadeUp .35s var(--ease) both; animation-delay: calc(var(--i, 0) * 40ms); }
 .col.over { border-color: var(--accent); background: #121A2B; box-shadow: 0 0 0 3px rgba(120, 166, 255, .12); }
 .col.over-limit { border-color: var(--warn); }
+/* Dynamic kanban: column widths come from generated rules (see kanban.rs `dynamic_css`). */
+.board-scroll.dyn .board { transition: grid-template-columns .25s var(--ease); }
+.board-scroll.dyn .col, .board-scroll.dyn .colhead { min-width: 0; }
+.card .pin { width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: var(--r-sm); background: none; color: var(--faint); opacity: 0; transition: opacity .15s, color .15s, background .15s; }
+.card:hover .pin, .card:focus-within .pin, .card .pin.on { opacity: 1; }
+.card .pin:hover { background: var(--chip); color: var(--text); }
+.card .pin.on { color: var(--accent); }
+.card .pin.on svg path { fill: currentColor; fill-opacity: .25; }
 .col-add { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 30px; padding: 0 var(--s3); border: 1px dashed var(--line-strong); border-radius: var(--r-md); background: none; color: var(--faint); font-size: 13px; font-weight: 500; transition: background .15s, color .15s, border-color .15s; }
 .col-add:hover { background: var(--hover); border-color: #3E4757; color: var(--text); }
 .colhead { display: flex; align-items: center; gap: var(--s2); padding: 2px var(--s1) var(--s1); }
@@ -366,6 +374,14 @@ main.panel.fill .board-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; -
 .card .task-sum { display: inline-flex; align-items: center; gap: var(--s1); font-family: var(--mono); font-size: var(--meta); color: var(--muted); }
 .card .total { display: inline-flex; align-items: center; gap: var(--s1); font-family: var(--mono); font-size: var(--meta); color: var(--text-2); white-space: nowrap; }
 .card .total .ico { color: var(--faint); }
+/* Opening and closing a card: the summary (.fold) and the details (.unfold) are both rendered
+   and swap heights with a grid-rows transition. A closed region also takes back the card's gap,
+   so it leaves no space behind. */
+.card .fold, .card .unfold { display: grid; transition: grid-template-rows .24s var(--ease), opacity .2s, margin-top .24s var(--ease); }
+.card .fold { grid-template-rows: 1fr; }
+.card.open .fold, .card .unfold { grid-template-rows: 0fr; opacity: 0; margin-top: calc(-1 * var(--s2)); }
+.card.open .unfold { grid-template-rows: 1fr; opacity: 1; margin-top: 0; }
+.card .fold-in { min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: var(--s2); }
 .card-more { display: flex; flex-direction: column; gap: var(--s2); padding-top: var(--s2); border-top: 1px dashed var(--card-line); }
 .card-more .tasks { margin: 0; padding: 0; border: 0; }
 .time-log { display: flex; flex-direction: column; gap: var(--s1); }

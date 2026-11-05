@@ -8,7 +8,9 @@
 //! The done column is a drop zone that closes items, with "View closed" for recent ones.
 //! Cards show the timer and add-time actions in their header, the description's first line, the
 //! first few tags and the time total; a chevron opens the full description and all tags, their
-//! tasks and the user's 7pace entries (only open cards load entries).
+//! tasks and the user's 7pace entries (fetched in bulk for all shown cards). Two optional
+//! settings: "Widen the hovered column", and "Open cards on hover", where a pin (saved per board)
+//! keeps a card open at the top of its column instead of the chevron.
 
 use std::collections::HashSet;
 
@@ -28,6 +30,56 @@ use crate::components::widgets::{Assignee, DateLabel, Icon, Prio, StatePill};
 use crate::routes::Route;
 use crate::services;
 use crate::state::{AppState, Drag, DropSlot, NewInColumn, use_app};
+
+/// "Open cards on hover": a hovered card opens at once and closes this long after the mouse leaves.
+const HOVER_CLOSE: std::time::Duration = std::time::Duration::from_millis(50);
+
+/// Remembers the last column the mouse was over as the board's `data-hc` (cells carry
+/// `data-kc`), cleared when the mouse leaves the board or reaches the done column (an empty
+/// `data-kc`: neutral ground, equal widths). Plain `:hover` would drop to
+/// "no column" in every gap (between header rows, between columns, over a lane header) and
+/// make the widths jump back and forth. Set in the DOM directly, so hovering never re-renders.
+const TRACK_HOVER_JS: &str = r#"
+const el = document.getElementById('kanban-board');
+if (!el || el.dataset.hoverWired) return;
+el.dataset.hoverWired = '1';
+el.addEventListener('mouseover', (e) => {
+  const c = e.target.closest('[data-kc]');
+  if (!c) return;
+  if (c.dataset.kc === '') delete el.dataset.hc;
+  else if (el.dataset.hc !== c.dataset.kc) el.dataset.hc = c.dataset.kc;
+});
+el.addEventListener('mouseleave', () => { delete el.dataset.hc; });
+"#;
+
+/// "Widen the hovered column": every column shares the width, and the hovered one
+/// (`data-hc`, see [`TRACK_HOVER_JS`]) takes a bigger share, so the board's total width stays
+/// the same.
+fn dynamic_css(n: usize) -> String {
+    let template = |wide: Option<usize>| {
+        (0..n)
+            .map(|i| {
+                if Some(i) == wide {
+                    "minmax(0, 1.8fr)"
+                } else {
+                    "minmax(0, 1fr)"
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
+    let mut css = format!(
+        ".board-scroll.dyn .board {{ grid-template-columns: {}; }}\n",
+        template(None)
+    );
+    for i in 0..n {
+        css.push_str(&format!(
+            ".board-scroll.dyn[data-hc=\"{i}\"] .board {{ grid-template-columns: {}; }}\n",
+            template(Some(i))
+        ));
+    }
+    css
+}
 
 /// Tags a collapsed card shows before "+N".
 const COLLAPSED_TAGS: usize = 3;
@@ -102,14 +154,19 @@ pub fn Kanban(board: String) -> Element {
         .filter(|c| filters::matches_board(c, &prefs, me.as_ref()))
         .map(|c| c.id)
         .collect();
-    // 7pace entries only for expanded cards and the tracked one: its rate limits are tight.
+    let kanban_style = st.settings.read().appearance.kanban.clone();
+    let (hover_widen, hover_open) = (kanban_style.hover_widen, kanban_style.hover_open);
+    let pinned: HashSet<CardId> = if hover_open {
+        prefs.pinned.iter().copied().collect()
+    } else {
+        HashSet::new()
+    };
+    // 7pace entries for every shown card (and the tracked one), fetched in bulk: one call per
+    // 100 cards, once per card until Reload, so opening or hovering a card costs nothing.
     let timer_card = st.time.read().timer.as_ref().map(|t| t.work_item);
-    let mut shown_ids: Vec<CardId> = visible
-        .iter()
-        .copied()
-        .filter(|id| st.card_open.read().contains(id) || Some(*id) == timer_card)
-        .collect();
+    let mut shown_ids: Vec<CardId> = visible.iter().copied().chain(timer_card).collect();
     shown_ids.sort_unstable();
+    shown_ids.dedup();
     let in_areas: Vec<&Card> = base
         .iter()
         .copied()
@@ -156,10 +213,21 @@ pub fn Kanban(board: String) -> Element {
         vec![(None, None, None)]
     };
     let n = columns.len().max(1);
-    let grid_style = format!(
-        "grid-template-columns: repeat({n}, minmax(236px, 1fr)); min-width: {}px",
-        n * 248
-    );
+    // Widening: the column template comes from `dynamic_css` (the hovered column widens), so
+    // only the board's width is set here.
+    let grid_style = if hover_widen {
+        format!("min-width: {}px", n * 248)
+    } else {
+        format!(
+            "grid-template-columns: repeat({n}, minmax(236px, 1fr)); min-width: {}px",
+            n * 248
+        )
+    };
+    let dyn_css = if hover_widen {
+        dynamic_css(n)
+    } else {
+        String::new()
+    };
     let header_cols: Vec<ColumnHead> = columns
         .iter()
         .map(|c| column_head(ws, b, c, &visible))
@@ -170,6 +238,12 @@ pub fn Kanban(board: String) -> Element {
         || filters::single_assignee(visible.iter().filter_map(|id| ws.cards.get(id))).is_some();
     // "New" per column: the column's state for the board's default type, preset in the dialog.
     // None for the done column (dropping there closes) and columns that don't map the type.
+    // The done column is neutral ground for widening: it never widens, and hovering it
+    // returns the board to equal widths (its cells carry an empty `data-kc`).
+    let closing_cols: Vec<bool> = columns
+        .iter()
+        .map(|c| c.kind == kanban_core::ColumnKind::Outgoing)
+        .collect();
     let new_in: Vec<Option<NewInColumn>> = columns
         .iter()
         .map(|c| {
@@ -286,10 +360,16 @@ pub fn Kanban(board: String) -> Element {
         if columns.is_empty() {
             div { class: "note", Icon { svg: icons::INFO } "All columns are hidden. Use the Columns menu to show some." }
         } else {
-            div { class: "board-scroll",
+            if hover_widen { style { "{dyn_css}" } }
+            div {
+                id: "kanban-board",
+                class: if hover_widen { "board-scroll dyn" } else { "board-scroll" },
+                onmounted: move |_| {
+                    let _ = document::eval(TRACK_HOVER_JS);
+                },
                 div { class: "board heads", style: "{grid_style}",
-                    for (i, h) in header_cols.iter().enumerate() {
-                        div { key: "h-{h.id}", class: "colhead", style: "--i: {i}",
+                    for (i, (h, neutral)) in header_cols.iter().zip(closing_cols.iter().copied()).enumerate() {
+                        div { key: "h-{h.id}", class: "colhead", "data-kc": if neutral { String::new() } else { i.to_string() }, style: "--i: {i}",
                             StatePill { state: h.name.clone(), category: h.category, color: h.color.clone() }
                             span { class: "count", "{h.shown}" }
                             if h.total > h.shown {
@@ -305,7 +385,7 @@ pub fn Kanban(board: String) -> Element {
                         }
                     }
                     // Second header row: a "New" button per column.
-                    for (h, preset) in header_cols.iter().zip(new_in) {
+                    for (i, (h, preset)) in header_cols.iter().zip(new_in).enumerate() {
                         match preset {
                             Some(c) => {
                                 let t = default_type.clone();
@@ -315,6 +395,7 @@ pub fn Kanban(board: String) -> Element {
                                     button {
                                         key: "n-{h.id}",
                                         class: "col-add",
+                                        "data-kc": "{i}",
                                         r#type: "button",
                                         "data-tip": "{tip}",
                                         aria_label: "{tip}",
@@ -324,7 +405,7 @@ pub fn Kanban(board: String) -> Element {
                                     }
                                 }
                             }
-                            None => rsx! { span { key: "n-{h.id}" } },
+                            None => rsx! { span { key: "n-{h.id}", "data-kc": if closing_cols[i] { String::new() } else { i.to_string() } } },
                         }
                     }
                 }
@@ -342,6 +423,8 @@ pub fn Kanban(board: String) -> Element {
                         root_titles: roots.clone(),
                         task_ids: hierarchy.tasks.clone(),
                         grid_style: grid_style.clone(),
+                        pinned: pinned.clone(),
+                        hover_open,
                         collapsed: collapsed_lanes,
                         wip_on,
                         col_shown: col_shown.clone(),
@@ -406,6 +489,9 @@ fn Lane(
     /// Parent → task ids ([`kanban_core::Hierarchy::tasks`]).
     task_ids: std::collections::HashMap<CardId, Vec<CardId>>,
     grid_style: String,
+    /// "Open cards on hover": pinned cards go first in their column.
+    pinned: HashSet<CardId>,
+    hover_open: bool,
     collapsed: Signal<HashSet<String>>,
     /// The WIP meter applies (one person's cards are shown).
     wip_on: bool,
@@ -424,13 +510,15 @@ fn Lane(
         .iter()
         .map(|c| {
             let all = board.placement.get(&c.id).cloned().unwrap_or_default();
-            let cards: Vec<Card> = all
+            let mut cards: Vec<Card> = all
                 .iter()
                 .filter(|id| visible.contains(id))
                 .filter_map(|id| ws.cards.get(id))
                 .filter(|card| lane_id.as_ref().is_none_or(|l| board.lane_of(card) == *l))
                 .cloned()
                 .collect();
+            // Stable: pinned cards first, each group in board order.
+            cards.sort_by_key(|c| !pinned.contains(&c.id));
             (c.clone(), cards, all.len())
         })
         .collect();
@@ -491,6 +579,8 @@ fn Lane(
                         categories: categories.clone(),
                         tasks: tasks.clone(),
                         wip_on,
+                        pinned: pinned.clone(),
+                        hover_open,
                     }
                 }
             }
@@ -512,6 +602,8 @@ fn ColumnCell(
     tasks: std::collections::HashMap<CardId, (Vec<TaskItem>, Option<String>)>,
     wip_on: bool,
     shown_in_column: usize,
+    pinned: HashSet<CardId>,
+    hover_open: bool,
 ) -> Element {
     let mut st = use_app();
     let mut show_closed = use_signal(|| false);
@@ -557,6 +649,7 @@ fn ColumnCell(
         section {
             class: "{class}",
             style: "--i: {index}",
+            "data-kc": if closing { String::new() } else { index.to_string() },
             aria_label: "{column.name}",
             ondragover: move |e| {
                 if dragging.is_none() { return; }
@@ -616,6 +709,8 @@ fn ColumnCell(
                     column_id: column.id.clone(),
                     lane_id: lane_id.clone(),
                     tasks: tasks.get(&card.id).cloned().unwrap_or_default(),
+                    pin: hover_open.then(|| pinned.contains(&card.id)),
+                    board_name: board_name.clone(),
                     card,
                 }
                 }
@@ -679,8 +774,15 @@ fn CardView(
     lane_id: Option<String>,
     /// The card's tasks, and the task type when it can own tasks.
     tasks: (Vec<TaskItem>, Option<String>),
+    /// "Open cards on hover": whether the card is pinned. `None` = classic (expand chevron).
+    pin: Option<bool>,
+    board_name: String,
 ) -> Element {
     let mut st = use_app();
+    // Hover mode: open as soon as the mouse is on the card, close a moment after it leaves.
+    let mut hovering = use_signal(|| false);
+    let mut hover_open = use_signal(|| false);
+    let pinned = pin == Some(true);
     let id = card.id;
     let dragging = *st.drag.read() == Some(Drag::Card(id));
     let pending = st.pending.read().contains(&id);
@@ -691,28 +793,35 @@ fn CardView(
         .as_ref()
         .is_some_and(|t| t.work_item == id);
     let accent = st.settings.read().appearance.kanban.accent.class();
-    let class = format!(
-        "card {accent}{}{}{}",
-        if dragging { " dragging" } else { "" },
-        if pending { " pending" } else { "" },
-        if tracking { " tracking" } else { "" }
-    );
     let (category, color) = state;
     let edit = card.clone();
     let parent = card.clone();
     let (task_list, add_task) = tasks;
-    let expanded = st.card_open.read().contains(&id);
-    // Collapsed: the first few tags and the description's first line; expanded: all of both.
-    let tags: Vec<String> = if expanded {
-        card.tags.clone()
-    } else {
-        card.tags.iter().take(COLLAPSED_TAGS).cloned().collect()
+    let expanded = match pin {
+        Some(p) => p || hover_open(),
+        None => st.card_open.read().contains(&id),
     };
+    let class = format!(
+        "card {accent}{}{}{}{}{}",
+        if expanded { " open" } else { "" },
+        if pinned { " pinned" } else { "" },
+        if dragging { " dragging" } else { "" },
+        if pending { " pending" } else { "" },
+        if tracking { " tracking" } else { "" }
+    );
+    // Collapsed: the first few tags and the description's first line; expanded: all of both.
+    // Both are always rendered and fold into each other with a CSS transition (`.fold` /
+    // `.unfold`), so opening and closing animate both ways.
+    let tags: Vec<String> = card.tags.iter().take(COLLAPSED_TAGS).cloned().collect();
+    let all_tags = card.tags.clone();
     let more_tags = card.tags.len() - tags.len();
     let more_tip = card.tags[tags.len()..].join(", ");
     let desc_line = kanban_core::description::first_line(&card.description);
-    let desc_html = (expanded && desc_line.is_some())
-        .then(|| kanban_core::description::sanitize_for_display(&card.description));
+    let desc_html = desc_line
+        .as_ref()
+        .map(|_| kanban_core::description::sanitize_for_display(&card.description));
+    // Only a description or hidden tags make the summary and the full view differ.
+    let swaps = desc_line.is_some() || more_tags > 0;
     let tasks_done = task_list.iter().filter(|t| t.category.is_done()).count();
     let has_details = !task_list.is_empty()
         || add_task.is_some()
@@ -732,6 +841,25 @@ fn CardView(
             style: "--i: {index}; --sc: #{color}",
             draggable: "true",
             aria_label: "{card.work_item_type} {id}: {card.title}",
+            onmouseenter: move |_| {
+                if pin.is_none() { return; }
+                hovering.set(true);
+                if !*hover_open.peek() {
+                    hover_open.set(true);
+                }
+            },
+            onmouseleave: move |_| {
+                if pin.is_none() { return; }
+                hovering.set(false);
+                // Close only if the mouse stays away, so brushing past the edge (or a card
+                // shifting under the mouse as it closes) doesn't snap it shut.
+                spawn(async move {
+                    tokio::time::sleep(HOVER_CLOSE).await;
+                    if !*hovering.peek() && *hover_open.peek() {
+                        hover_open.set(false);
+                    }
+                });
+            },
             ondragstart: move |e| {
                 let _ = e.data_transfer().set_data("text/plain", &id.to_string());
                 e.data_transfer().set_effect_allowed("move");
@@ -757,7 +885,31 @@ fn CardView(
                 div { class: "quick",
                     CardTimeActions { card: parent.clone() }
                 }
-                if has_details {
+                if let Some(on) = pin {
+                    button {
+                        class: if on { "pin on" } else { "pin" },
+                        r#type: "button",
+                        draggable: "false",
+                        aria_pressed: "{on}",
+                        aria_label: if on { "Unpin" } else { "Pin open at the top" },
+                        "data-tip": if on { "Unpin" } else { "Pin open at the top" },
+                        onclick: {
+                            let board_name = board_name.clone();
+                            move |e: MouseEvent| {
+                                e.stop_propagation();
+                                let Some((project, team)) = st.workspace.peek().as_ref().map(|w| (w.project.clone(), w.team.clone())) else { return; };
+                                save_board_prefs(st, &project, &team, &board_name, |p| {
+                                    if on {
+                                        p.pinned.retain(|x| *x != id);
+                                    } else if !p.pinned.contains(&id) {
+                                        p.pinned.push(id);
+                                    }
+                                });
+                            }
+                        },
+                        Icon { svg: icons::PIN }
+                    }
+                } else if has_details {
                     button {
                         class: if expanded { "chev open" } else { "chev" },
                         r#type: "button",
@@ -788,17 +940,35 @@ fn CardView(
                     span { "{title}" }
                 }
             }
-            if let Some(html) = desc_html {
-                div { class: "card-desc", draggable: "false", dangerous_inner_html: "{html}" }
-            } else if let Some(line) = desc_line {
-                p { class: "desc-line", "{line}" }
-            }
-            if !tags.is_empty() {
-                div { class: if expanded { "tags" } else { "tags one-row" },
-                    for t in tags { span { key: "{t}", class: "tag", "{t}" } }
-                    if more_tags > 0 {
-                        span { class: "tag more", "data-tip": "{more_tip}", "+{more_tags}" }
+            if swaps {
+                // Collapsed summary: folds away as the card opens.
+                div { class: "fold", "inert": if expanded { Some("true") } else { None },
+                    div { class: "fold-in",
+                        if let Some(line) = desc_line.clone() { p { class: "desc-line", "{line}" } }
+                        if !tags.is_empty() {
+                            div { class: "tags one-row",
+                                for t in tags.clone() { span { key: "{t}", class: "tag", "{t}" } }
+                                if more_tags > 0 {
+                                    span { class: "tag more", "data-tip": "{more_tip}", "+{more_tags}" }
+                                }
+                            }
+                        }
                     }
+                }
+                // Full description and every tag: unfold as the card opens.
+                div { class: "unfold", "inert": if expanded { None } else { Some("true") },
+                    div { class: "fold-in",
+                        if let Some(html) = desc_html { div { class: "card-desc", draggable: "false", dangerous_inner_html: "{html}" } }
+                        if !all_tags.is_empty() {
+                            div { class: "tags",
+                                for t in all_tags { span { key: "{t}", class: "tag", "{t}" } }
+                            }
+                        }
+                    }
+                }
+            } else if !tags.is_empty() {
+                div { class: "tags",
+                    for t in tags { span { key: "{t}", class: "tag", "{t}" } }
                 }
             }
             div { class: "bottom",
@@ -810,12 +980,16 @@ fn CardView(
                 DateLabel { date: card.target_date, open: !category.is_done() }
                 CardTimeTotal { completed_work: card.completed_work }
             }
-            if expanded {
-                div { class: "card-more",
-                    if !task_list.is_empty() || add_task.is_some() {
-                        CardTasks { parent: parent.clone(), tasks: task_list.clone(), task_type: add_task.clone() }
+            if has_details {
+                div { class: "unfold", "inert": if expanded { None } else { Some("true") },
+                    div { class: "fold-in",
+                        div { class: "card-more",
+                            if !task_list.is_empty() || add_task.is_some() {
+                                CardTasks { parent: parent.clone(), tasks: task_list.clone(), task_type: add_task.clone() }
+                            }
+                            CardTimeLog { card: parent.clone() }
+                        }
                     }
-                    CardTimeLog { card: parent.clone() }
                 }
             }
         }

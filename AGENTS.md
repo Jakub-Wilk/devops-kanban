@@ -9,7 +9,7 @@ tags and a searchable parent; dark "Graphite" theme, Inter with IBM Plex Mono fo
 Keep new UI consistent with `crates/app/assets/main.css` and `dialogs.css` (use the spacing
 `--s1…--s6` and radius `--r-sm/md/lg` tokens) and don't redesign without being asked. Row and card style is user-configurable (`appearance` in `docs/settings.md`). 7pace time
 tracking is on the kanban only (timer and add time in the card header, the user's entries in the
-card's expandable details, fetched only when a card is open) plus a compact running-timer chip in
+card's expandable details, fetched in bulk for the shown cards) plus a compact running-timer chip in
 the top bar; Stop opens the time dialog and applies it to the worklog 7pace creates. The app side
 is `crates/app/src/time_tracking.rs` and `components/time.rs`.
 

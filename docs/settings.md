@@ -50,6 +50,8 @@ keys get the defaults, which match the original look.
 | `appearance.list.accent`     | string | `left`  | 4 px bar in the type colour on List rows: `left`, `right` or `off` |
 | `appearance.list.icon`       | bool   | `false` | The type's icon (as set in Azure DevOps) before each List title |
 | `appearance.kanban.accent`   | string | `left`  | 4 px bar in the state colour on kanban cards: `left`, `right` or `off` |
+| `appearance.kanban.hover_widen` | bool | `false` | The column under the mouse widens while the others narrow (same total width); the done column never widens and resets to equal widths |
+| `appearance.kanban.hover_open`  | bool | `false` | Cards open as soon as they are hovered and close shortly after the mouse leaves; a pin replaces the expand chevron and keeps a card open at the top of its column |
 
 ```toml
 [appearance.list]
@@ -69,6 +71,7 @@ them on the kanban. Delete a table to reset that board.
 | Key              | Type     | Default | Meaning |
 |------------------|----------|---------|---------|
 | `hidden_columns` | string[] | `[]`    | Column names hidden on that board (from the *Columns* menu) |
+| `pinned`         | int[]    | `[]`    | Cards pinned open at the top of their column (with `appearance.kanban.hover_open`) |
 | `epic`           | int?     | none    | Epic the kanban is filtered to (from the *Epic* picker) |
 | `assignees`      | string[] | `[]`    | Kanban *Assigned to* filter: `@me`, `@unassigned` or a `uniqueName` |
 | `areas`          | string[] | `[]`    | Kanban *Area* filter: area paths, each including the areas below it |

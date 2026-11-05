@@ -62,7 +62,7 @@ pub fn TimeKeeper() -> Element {
     rsx! { TimeDialog {} }
 }
 
-/// Fetches the user's entries for `ids` — the kanban's expanded cards and the tracked one — (only
+/// Fetches the user's entries for `ids` — every card the kanban shows and the tracked one — (only
 /// ones not loaded yet), and again after Reload; re-reads the timer when the kanban opens.
 /// Renders nothing.
 #[component]
@@ -244,6 +244,7 @@ pub fn CardTimeLog(card: Card) -> Element {
         .cloned()
         .unwrap_or_default();
     let n = entries.len();
+    let loaded = st.time.read().loaded.contains(&card.id);
     let shown: Vec<TimeEntry> = if show_all() {
         entries
     } else {
@@ -267,7 +268,7 @@ pub fn CardTimeLog(card: Card) -> Element {
                 }
             }
             if shown.is_empty() {
-                span { class: "none", "No entries yet" }
+                span { class: "none", if loaded { "No entries yet" } else { "Loading…" } }
             }
             div { class: "entries",
                 for e in shown {

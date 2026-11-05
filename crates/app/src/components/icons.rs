@@ -187,6 +187,12 @@ icon!(
     "2",
     "<rect x=\"5\" y=\"11\" width=\"14\" height=\"10\" rx=\"2\"/><path d=\"M8 11V7a4 4 0 0 1 8 0v4\"/>"
 );
+icon!(
+    PIN,
+    "14",
+    "2",
+    "<path d=\"M9 4h6l-1 6 3 3v2H7v-2l3-3-1-6zM12 15v5\"/>"
+);
 icon!(CLOSE_12, "12", "2.4", "<path d=\"M6 6l12 12M18 6L6 18\"/>");
 icon!(EXTERNAL, "12", "2.2", "<path d=\"M7 17L17 7M9 7h8v8\"/>");
 icon!(

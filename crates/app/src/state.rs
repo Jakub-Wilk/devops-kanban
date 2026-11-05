@@ -201,8 +201,8 @@ pub struct AppState {
     pub pending: Signal<HashSet<CardId>>,
     pub drag: Signal<Option<Drag>>,
     pub drop_slot: Signal<Option<DropSlot>>,
-    /// Kanban cards whose tasks and time log are open. Only these (and the tracked card) load
-    /// 7pace entries.
+    /// Kanban cards whose details (tasks, time log) are open (classic kanban). 7pace entries load
+    /// for every shown card regardless.
     pub card_open: Signal<HashSet<CardId>>,
     pub dialog: Signal<Option<DialogState>>,
     pub toasts: Signal<Vec<Toast>>,

@@ -127,6 +127,11 @@ impl Default for ListStyle {
 #[serde(default)]
 pub struct CardStyle {
     pub accent: AccentSide,
+    /// The column under the mouse widens and the others narrow (same total width).
+    pub hover_widen: bool,
+    /// Cards open while hovered, and a pin (instead of the expand chevron) keeps a card open at
+    /// the top of its column.
+    pub hover_open: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -140,6 +145,8 @@ pub struct BoardPrefs {
     pub assignees: Vec<String>,
     /// Area filter of the kanban (see [`TabFilters::areas`]).
     pub areas: Vec<String>,
+    /// Cards pinned open at the top of their column (`appearance.kanban.hover_open`).
+    pub pinned: Vec<u32>,
 }
 
 /// Filters of one team's board screen. The search box is not saved.
@@ -440,6 +447,8 @@ mod tests {
         assert_eq!(old.appearance.list.accent, AccentSide::Left);
         assert!(!old.appearance.list.icon);
         assert_eq!(old.appearance.kanban.accent, AccentSide::Left);
+        assert!(!old.appearance.kanban.hover_widen);
+        assert!(!old.appearance.kanban.hover_open);
 
         let s = Settings::from_toml(
             "organization = \"x\"\n[appearance.list]\naccent = \"right\"\nicon = true\n[appearance.kanban]\naccent = \"off\"",
@@ -483,9 +492,15 @@ mod tests {
                 epic: Some(118181),
                 assignees: vec!["@me".into()],
                 areas: vec!["IT Finance\\Penny".into()],
+                pinned: vec![117349],
             },
         );
         let back = Settings::from_toml(&s.to_toml().unwrap()).unwrap();
+        assert_eq!(
+            back.board_prefs("IT Finance", "IT Finance Team", "Stories")
+                .pinned,
+            vec![117349]
+        );
         assert_eq!(
             back.board_prefs("IT Finance", "IT Finance Team", "Stories")
                 .hidden_columns,

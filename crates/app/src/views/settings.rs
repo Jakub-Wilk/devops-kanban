@@ -145,6 +145,8 @@ fn AppearanceSection() -> Element {
     };
     let list = a.list.clone();
     let card_accent = a.kanban.accent;
+    let hover_widen = a.kanban.hover_widen;
+    let hover_open = a.kanban.hover_open;
     // (id, depth, type, ADO icon id, type colour, priority, title, state, state colour, owner)
     let rows = [
         (
@@ -257,6 +259,32 @@ fn AppearanceSection() -> Element {
             div { class: "row",
                 div { strong { "Accent bar" } p { "A 4 px bar in the card's state colour on one edge of the card." } }
                 AccentPicker { label: "Kanban accent bar", value: card_accent, on_pick: move |v| set(&|a| a.kanban.accent = v) }
+            }
+            div { class: "row",
+                div {
+                    strong { "Widen the hovered column" }
+                    p { "The column under the mouse widens and the others narrow, so the board keeps its width. The done column stays as it is." }
+                }
+                input {
+                    r#type: "checkbox",
+                    style: "width: 18px; height: 18px; accent-color: var(--accent)",
+                    aria_label: "Widen the hovered column",
+                    checked: hover_widen,
+                    onchange: move |e| set(&|a| a.kanban.hover_widen = e.checked()),
+                }
+            }
+            div { class: "row",
+                div {
+                    strong { "Open cards on hover" }
+                    p { "Cards open while the mouse is on them. A pin replaces the expand button and keeps a card open at the top of its column." }
+                }
+                input {
+                    r#type: "checkbox",
+                    style: "width: 18px; height: 18px; accent-color: var(--accent)",
+                    aria_label: "Open cards on hover",
+                    checked: hover_open,
+                    onchange: move |e| set(&|a| a.kanban.hover_open = e.checked()),
+                }
             }
             div { class: "ap-prev",
                 span { class: "cap", "Preview" }
