@@ -338,6 +338,25 @@ pub fn kanban_cards<'a>(
         .collect()
 }
 
+/// States an item of `work_item_type` may be set to: those its kanban's visible columns map, each
+/// with that column (see [`Board::visible_states`]). `None` when the type has no kanban (tasks,
+/// the top level), where every state of the type is allowed.
+pub fn board_states(
+    ws: &Workspace,
+    settings: &Settings,
+    work_item_type: &str,
+) -> Option<Vec<(String, String)>> {
+    let level = ws.level_of_type(work_item_type)?;
+    if !ws.kanban_levels().iter().any(|l| l.name == level.name) {
+        return None;
+    }
+    let board = ws.boards.get(&level.name)?;
+    let hidden = settings
+        .board_prefs(&ws.project, &ws.team, &level.name)
+        .hidden_columns;
+    Some(board.visible_states(work_item_type, &hidden))
+}
+
 /// States mapped by the kanban columns that aren't hidden, in column order, across the kanban
 /// levels' boards.
 pub fn kanban_states(ws: &Workspace, settings: &Settings) -> Vec<String> {

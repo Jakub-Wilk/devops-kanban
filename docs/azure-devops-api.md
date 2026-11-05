@@ -163,6 +163,29 @@ Content-Type: application/json-patch+json
   the path). Map it to `AdoError::Conflict`.
 - The response is the updated work item. Replace the local copy, because rules may have changed other fields.
 
+## Editing an item (the dialog)
+
+The edit dialog loads the full item first (`GET …/workitems/{id}?$expand=relations` returns every
+field): `System.Description` (HTML, not fetched with the cards because it can be large),
+`System.ChangedBy`/`ChangedDate` and `System.CreatedBy`/`CreatedDate` for the header.
+
+- The PATCH carries only the fields the user changed, against the revision the dialog loaded
+  (`kanban_core::item::ItemDraft::patch_fields`), after the usual `test /rev`.
+- `System.Tags` is one `"; "`-separated string; writing it replaces the whole list. Tags compare
+  case-insensitively.
+- `System.Description` is sanitised (ammonia) before the editor shows it, since it comes from other
+  people and renders inside the app's webview, and again before it is written. It is only written
+  when the user typed in it.
+- On a conflict nothing is retried: the dialog stays open, refetches the item and rebases the
+  user's edits onto it (fields they didn't touch take the new values) and names who changed what.
+  Saving again is the user's call.
+- The State menu offers only the states mapped by the item's kanban columns that aren't hidden
+  (`Board::visible_states`), so a state can't land a card in a column the user can't see. A card
+  already in such a state keeps it listed. Tasks and top-level items have no kanban and get every
+  state of their type.
+- Creating can set `System.State` directly. A process rule may refuse a non-initial state; the error
+  is shown as is.
+
 ## Reordering
 
 ```http

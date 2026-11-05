@@ -181,6 +181,51 @@ icon!(
     "<path d=\"M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z\"/>"
 );
 
+icon!(
+    LOCK,
+    "16",
+    "2",
+    "<rect x=\"5\" y=\"11\" width=\"14\" height=\"10\" rx=\"2\"/><path d=\"M8 11V7a4 4 0 0 1 8 0v4\"/>"
+);
+icon!(CLOSE_12, "12", "2.4", "<path d=\"M6 6l12 12M18 6L6 18\"/>");
+icon!(EXTERNAL, "12", "2.2", "<path d=\"M7 17L17 7M9 7h8v8\"/>");
+icon!(
+    BOLD,
+    "15",
+    "2.4",
+    "<path d=\"M7 5h6a3.5 3.5 0 0 1 0 7H7zM7 12h7a3.5 3.5 0 0 1 0 7H7z\"/>"
+);
+icon!(
+    ITALIC,
+    "15",
+    "2.2",
+    "<path d=\"M14 5h-4M14 19h-4M14 5l-4 14\"/>"
+);
+icon!(
+    BULLETS,
+    "15",
+    "2.2",
+    "<path d=\"M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01\"/>"
+);
+icon!(
+    CHECKLIST,
+    "15",
+    "2.2",
+    "<path d=\"M4 6l1.5 1.5L8 5M4 12l1.5 1.5L8 11M4 18l1.5 1.5L8 17M11 6h9M11 12h9M11 18h9\"/>"
+);
+icon!(
+    LINK,
+    "15",
+    "2.2",
+    "<path d=\"M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1\"/>"
+);
+icon!(
+    CODE,
+    "15",
+    "2.2",
+    "<path d=\"M8 8l-4 4 4 4M16 8l4 4-4 4\"/>"
+);
+
 /// The SVG for an ADO work item type icon id, if we have one.
 pub fn type_icon(ado_icon_id: &str) -> Option<&'static str> {
     Some(match ado_icon_id {

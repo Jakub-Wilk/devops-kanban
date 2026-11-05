@@ -32,6 +32,11 @@ pub mod fields {
     pub const PRIORITY: &str = "Microsoft.VSTS.Common.Priority";
     pub const TARGET_DATE: &str = "Microsoft.VSTS.Scheduling.TargetDate";
     pub const COMPLETED_WORK: &str = "Microsoft.VSTS.Scheduling.CompletedWork";
+    /// HTML. Not fetched with the cards; the edit dialog reads it with the full item.
+    pub const DESCRIPTION: &str = "System.Description";
+    pub const CHANGED_BY: &str = "System.ChangedBy";
+    pub const CREATED_BY: &str = "System.CreatedBy";
+    pub const CREATED_DATE: &str = "System.CreatedDate";
 }
 
 /// Someone a card can be assigned to.

@@ -168,6 +168,11 @@ Kanban only (`crates/app/src/time_tracking.rs`, `components/time.rs`):
 - **Timer:** `current` on Kanban open, window focus, after start/stop, and every 5 minutes.
 - **Writes:** `POST`/`PATCH`/`DELETE rest/workLogs`, `startTracking`, `stopTracking/0`. After each,
   the card's entries are refetched and the ADO card is refetched ~6 s later for `CompletedWork`.
+- **Stop:** opens the time dialog with the timer's time; the timer keeps running until the user
+  confirms. Confirming calls `stopTracking/0`, which saves the track as a worklog by itself, so the
+  app never creates a second one: it reads the card's worklogs, takes the entry that starts at the
+  timer's start (±5 min), and `PATCH`es it only if the user changed the duration, timing, activity
+  or comment. An untouched duration keeps 7pace's exact length.
 
 ## Unverified
 

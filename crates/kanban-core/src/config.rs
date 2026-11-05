@@ -13,6 +13,8 @@ use crate::error::CoreError;
 
 pub const KEYRING_SERVICE: &str = "devops-kanban";
 const MIN_POLL_SECS: u64 = 10;
+/// `one_off_tag` until the user changes it.
+pub const DEFAULT_ONE_OFF_TAG: &str = "Ad-Hoc";
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -30,6 +32,9 @@ pub struct Settings {
     pub timeline_info_width: Option<u32>,
     /// The window was maximised when last used; the next launch opens maximised.
     pub window_maximized: bool,
+    /// Tag marking one-off work items: with it set, the item dialog offers a checkbox that adds
+    /// the tag and creates the item without a parent (the only way to do so). Empty = off.
+    pub one_off_tag: String,
     pub api: ApiSettings,
     pub time_tracking: TimeTrackingSettings,
     /// How List rows and kanban cards are drawn (Settings › Appearance).
@@ -191,6 +196,13 @@ pub struct TabFilters {
     pub item_states: Vec<String>,
 }
 
+impl Settings {
+    /// The one-off tag, trimmed; `None` when turned off (blank).
+    pub fn one_off_tag(&self) -> Option<&str> {
+        Some(self.one_off_tag.trim()).filter(|t| !t.is_empty())
+    }
+}
+
 impl Default for Settings {
     fn default() -> Self {
         Self {
@@ -207,6 +219,7 @@ impl Default for Settings {
             api: ApiSettings::default(),
             time_tracking: TimeTrackingSettings::default(),
             appearance: AppearanceSettings::default(),
+            one_off_tag: DEFAULT_ONE_OFF_TAG.into(),
             boards: BTreeMap::new(),
             views: BTreeMap::new(),
         }
@@ -438,6 +451,21 @@ mod tests {
         assert_eq!(s.appearance.kanban.accent, AccentSide::Off);
         let back = Settings::from_toml(&s.to_toml().unwrap()).unwrap();
         assert_eq!(back.appearance, s.appearance);
+    }
+
+    #[test]
+    fn one_off_tag() {
+        // Configs without the key get the default.
+        let old = Settings::from_toml("organization = \"x\"").unwrap();
+        assert_eq!(old.one_off_tag(), Some("Ad-Hoc"));
+        let mut s = old.clone();
+        s.one_off_tag = " one-off ".into();
+        let back = Settings::from_toml(&s.to_toml().unwrap()).unwrap();
+        assert_eq!(back.one_off_tag(), Some("one-off"));
+        // Turned off stays off after a save and reload.
+        s.one_off_tag = String::new();
+        let back = Settings::from_toml(&s.to_toml().unwrap()).unwrap();
+        assert_eq!(back.one_off_tag(), None);
     }
 
     #[test]

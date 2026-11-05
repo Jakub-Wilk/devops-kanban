@@ -443,24 +443,9 @@ main.panel { padding-top: var(--s5); padding-bottom: 48px; display: flex; flex-d
 .tl-undated span { position: absolute; top: -10px; left: 8px; background: var(--panel); padding: 0 var(--s3); color: var(--faint); font-size: 12px; }
 .tl-set { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 3; }
 
-/* ---------- dialog ---------- */
+/* ---------- dialog (the dialogs themselves are in dialogs.css) ---------- */
 .overlay { position: fixed; inset: 0; z-index: 50; background: rgba(4, 6, 9, .72); display: flex; align-items: flex-start; justify-content: center; padding: 48px var(--s4); overflow-y: auto; animation: fade .2s ease both; backdrop-filter: blur(2px); }
-.dialog { width: 100%; max-width: 560px; background: var(--panel); border: 1px solid var(--line-strong); border-radius: var(--r-lg); box-shadow: 0 24px 64px rgba(0, 0, 0, .55); display: flex; flex-direction: column; animation: popIn .28s var(--spring) both; }
-.dialog .head { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); padding: var(--s4) var(--s3) var(--s4) var(--s5); border-bottom: 1px solid var(--line); }
-.dialog h2 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
-.dialog .sub { color: var(--faint); font-size: 13px; }
-.dialog .body { display: flex; flex-direction: column; gap: var(--s4); padding: var(--s5) var(--s5); }
-.dialog .foot { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--s3); padding: var(--s4) var(--s5); border-top: 1px solid var(--line); }
-.dialog label.f, .dialog fieldset { display: flex; flex-direction: column; gap: var(--s2); border: 0; margin: 0; padding: 0; min-width: 0; }
-.dialog .lbl, .dialog legend { font-weight: 600; font-size: 13px; padding: 0 0 2px; }
-.dialog .hint { color: var(--faint); font-size: 12px; }
-.dialog .hint.bad { color: var(--danger); }
-.dialog textarea.field { padding: var(--s2) var(--s3); resize: vertical; font-family: inherit; font-size: 14px; color: var(--text); }
 .ghost.danger { border-color: #6A2A30; background: #22161A; color: var(--danger); }
-.dialog .field { width: 100%; }
-.dialog .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--s4); }
-.dialog .chips { display: grid; grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); gap: var(--s2); }
-.dialog .chips .chip { justify-content: center; padding: 0 var(--s3); }
 .spinner { width: 16px; height: 16px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: spin .7s linear infinite; }
 
 /* ---------- toasts ---------- */

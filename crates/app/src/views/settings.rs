@@ -97,6 +97,21 @@ pub fn Settings() -> Element {
                             }
                         }
                         div { class: "row",
+                            div { strong { "One-off tag" } p { "Tag for one-off items. When set, new and edited items get a checkbox next to Tags that adds it and leaves the parent empty, the only way to save an item without a parent. Empty turns it off; the default is “Ad-Hoc”." } }
+                            input {
+                                class: "field",
+                                r#type: "text",
+                                style: "width: 200px",
+                                placeholder: "Off",
+                                value: "{s.one_off_tag}",
+                                onchange: move |e| {
+                                    let v = e.value().replace(';', " ").trim().to_owned();
+                                    st.settings.write().one_off_tag = v;
+                                    services::save_settings(st);
+                                },
+                            }
+                        }
+                        div { class: "row",
                             div { strong { "Log level" } p { "tracing filter, e.g. info or kanban_core=debug. RUST_LOG overrides it; applies on restart." } }
                             input {
                                 class: "field",

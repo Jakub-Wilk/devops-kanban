@@ -27,6 +27,7 @@ use state::AppState;
 /// Embedded rather than `asset!`: without `dx`, Dioxus looks for assets next to the
 /// executable, so a plain `cargo run` would start unstyled.
 const MAIN_CSS: &str = include_str!("../assets/main.css");
+const DIALOGS_CSS: &str = include_str!("../assets/dialogs.css");
 const FONTS: &str = "https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&family=Inter:wght@400;500;600;700&display=swap";
 
 fn main() {
@@ -79,6 +80,7 @@ fn App() -> Element {
         document::Link { rel: "preconnect", href: "https://fonts.googleapis.com" }
         document::Stylesheet { href: FONTS }
         document::Style { {MAIN_CSS} }
+        document::Style { {DIALOGS_CSS} }
         Router::<Route> {}
         ItemDialog {}
         Toasts {}

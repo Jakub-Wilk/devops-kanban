@@ -269,3 +269,54 @@ fn assignee_keeps_avatar_descriptor() {
     let grace = cards[&118254].assigned_to.as_ref().unwrap();
     assert_eq!(grace.descriptor, None);
 }
+
+#[test]
+fn parent_types_follow_the_levels() {
+    let mut cfg: BacklogConfigurationDto = fixture("backlog_configuration.json");
+    cfg.bugs_behavior = Some("asTasks".into());
+    let levels = levels_of(&cfg);
+    let tasks = kanban_core::workspace::task_types_of(&cfg);
+    let parents = |t: &str| kanban_core::workspace::parent_types(&levels, &tasks, t);
+    assert!(parents("Epic").is_empty());
+    assert_eq!(parents("Feature"), ["Epic"]);
+    assert_eq!(parents("User Story"), ["Epic", "Feature"]);
+    // Tasks and bugs-as-tasks hang under requirement-level items.
+    assert_eq!(parents("Task"), levels.last().unwrap().work_item_types);
+    assert_eq!(parents("Bug"), parents("Task"));
+}
+
+#[test]
+fn column_for_state_uses_the_mappings() {
+    let board = stories_board();
+    let col = |s: &str| {
+        board
+            .column_for_state("User Story", s)
+            .map(|c| c.name.clone())
+    };
+    let first = board.columns[0].state_mappings.get("User Story").cloned();
+    assert_eq!(
+        first.as_deref().and_then(col),
+        Some(board.columns[0].name.clone())
+    );
+    assert_eq!(col("No such state"), None);
+}
+
+#[test]
+fn visible_states_skip_hidden_columns() {
+    let board = stories_board();
+    let all = board.visible_states("User Story", &[]);
+    assert!(!all.is_empty());
+    // One entry per state, named after the first column mapping it.
+    let first = &board.columns[0];
+    assert_eq!(
+        all[0],
+        (
+            first.state_mappings["User Story"].clone(),
+            first.name.clone()
+        )
+    );
+    let hidden = vec![first.name.clone()];
+    let rest = board.visible_states("User Story", &hidden);
+    assert!(rest.iter().all(|(_, c)| *c != first.name));
+    assert!(board.visible_states("No such type", &[]).is_empty());
+}

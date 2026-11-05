@@ -19,6 +19,7 @@ time.workspace = true
 toml.workspace = true
 directories.workspace = true
 keyring.workspace = true
+ammonia.workspace = true
 
 [lints]
 workspace = true

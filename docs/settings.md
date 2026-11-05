@@ -31,6 +31,7 @@ The Setup view creates this file on first run. Start from
 | `last_view`              | string? | none                    | Last tab on the board screen: `list`, `kanban` or `timeline` |
 | `timeline_info_width`    | int?    | none (560)              | Width in px of the Timeline's item list, set by dragging the separator |
 | `window_maximized`       | bool    | `false`                 | The window was maximised when last used, so the app opens maximised. Written by the app |
+| `one_off_tag`            | string  | `Ad-Hoc`                | Tag for one-off items (`""` turns it off). When set, the item dialog shows a checkbox with this tag next to Tags (features and stories, not epics or tasks); checking it adds the tag and leaves the parent empty, the only way to save an item without a parent. Set in *Settings* |
 | `api.base_url`           | string  | `https://dev.azure.com` | ADO host |
 | `api.api_version`        | string  | `7.1`                   | api-version for all stable endpoints |
 | `api.max_batch`          | int     | `200`                   | Ids per `workitemsbatch` call. The ADO maximum is 200 |

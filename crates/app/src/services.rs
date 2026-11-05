@@ -10,13 +10,13 @@ use ado_client::{AdoClient, AdoError, ClientConfig, PatAuth, PatchDocument, Work
 use dioxus::prelude::*;
 use kanban_core::card::{Card, CardId, Person, fields};
 use kanban_core::{
-    CoreError, MovePlan, MoveTarget, Settings, StateCategory, SyncEngine, SyncEvent, Workspace,
-    cache,
+    CoreError, ItemDraft, MovePlan, MoveTarget, Settings, StateCategory, SyncEngine, SyncEvent,
+    Workspace, cache,
 };
 use serde_json::Value;
 use time::OffsetDateTime;
 
-use crate::state::{AppState, MoveBack, Status, Toast, ToastKind};
+use crate::state::{AppState, ItemMeta, MoveBack, Status, Toast, ToastKind};
 
 const TOAST_SECS: u64 = 6;
 
@@ -595,174 +595,160 @@ pub fn reorder_item(mut st: AppState, id: CardId, prev: Option<CardId>, next: Op
     });
 }
 
-/// Fields the dialog edits, as (reference name, value) for the patch.
-pub struct ItemFields {
-    pub title: String,
-    pub area: String,
-    pub priority: u8,
-    pub assignee: Option<Person>,
-    pub target_date: Option<time::Date>,
-    pub state: Option<String>,
+/// The full item for the edit dialog: the current card (stored, so the board catches up too),
+/// its sanitised description and who changed/created it.
+pub struct ItemDetails {
+    pub card: Card,
+    pub description: String,
+    pub meta: ItemMeta,
 }
 
-impl ItemFields {
-    fn changes(&self, before: Option<&Card>) -> Vec<(String, Value)> {
-        let mut out = Vec::new();
-        let mut set = |field: &str, new: Value, old: Option<Value>| {
-            if old.as_ref() != Some(&new) && !(new.is_null() && old.is_none()) {
-                out.push((field.to_owned(), new));
-            }
-        };
-        set(
-            fields::TITLE,
-            Value::from(self.title.clone()),
-            before.map(|c| Value::from(c.title.clone())),
-        );
-        set(
-            fields::AREA_PATH,
-            Value::from(self.area.clone()),
-            before.map(|c| Value::from(c.area_path.clone())),
-        );
-        set(
-            fields::PRIORITY,
-            Value::from(self.priority),
-            before.and_then(|c| c.priority.map(Value::from)),
-        );
-        set(
-            fields::ASSIGNED_TO,
-            self.assignee
-                .as_ref()
-                .map_or(Value::Null, |p| Value::from(p.unique_name.clone())),
-            before.and_then(|c| {
-                c.assigned_to
-                    .as_ref()
-                    .map(|p| Value::from(p.unique_name.clone()))
-            }),
-        );
-        set(
-            fields::TARGET_DATE,
-            self.target_date.map_or(Value::Null, |d| {
-                Value::from(kanban_core::card::format_date_field(d))
-            }),
-            before.and_then(|c| {
-                c.target_date
-                    .map(|d| Value::from(kanban_core::card::format_date_field(d)))
-            }),
-        );
-        if let Some(state) = &self.state {
-            set(
-                fields::STATE,
-                Value::from(state.clone()),
-                before.map(|c| Value::from(c.state.clone())),
-            );
-        }
-        out
-    }
-
-    fn apply(self, c: &mut Card) {
-        c.title = self.title;
-        c.area_path = self.area;
-        c.priority = Some(self.priority);
-        c.assigned_to = self.assignee;
-        c.target_date = self.target_date;
-        if let Some(s) = self.state {
-            c.state = s;
-        }
-    }
-}
-
-/// Saves the dialog: creates a work item (with parent link) or updates one (re-parenting if
-/// the parent changed). Returns once the request finished; errors become toasts.
-pub async fn save_item(
-    mut st: AppState,
-    editing: Option<CardId>,
-    work_item_type: String,
-    parent: Option<CardId>,
-    item: ItemFields,
-) -> bool {
-    let Some(client) = st.client.peek().clone() else {
-        return false;
-    };
-    let Some(project) = st.workspace.peek().as_ref().map(|w| w.project.clone()) else {
-        return false;
-    };
-    let Some(id) = editing else {
-        let mut doc = item
-            .changes(None)
-            .into_iter()
-            .fold(PatchDocument::create(), |d, (f, v)| {
-                if v.is_null() { d } else { d.field(&f, v) }
-            });
-        if let Some(p) = parent {
-            doc = doc.parent(&client.work_item_url(p));
-            // Tasks land in their parent's sprint, as on ADO's own board.
-            let iteration = st.workspace.peek().as_ref().and_then(|w| {
-                w.task_types
-                    .contains(&work_item_type)
-                    .then(|| w.cards.get(&p).map(|c| c.iteration_path.clone()))
-                    .flatten()
-            });
-            if let Some(it) = iteration.filter(|i| !i.is_empty()) {
-                doc = doc.field(fields::ITERATION_PATH, Value::String(it));
-            }
-        }
-        return match client
-            .create_work_item(&project, &work_item_type, &doc)
-            .await
-        {
-            Ok(dto) => {
-                let in_scope = st.workspace.write().as_mut().is_some_and(|ws| {
-                    ws.upsert(std::slice::from_ref(&dto));
-                    ws.cards.contains_key(&dto.id)
-                });
-                if in_scope {
-                    toast(st, ToastKind::Info, format!("Created #{}", dto.id));
-                } else {
-                    toast(
-                        st,
-                        ToastKind::Warn,
-                        format!(
-                            "Created #{}, but its area is outside this team's board.",
-                            dto.id
-                        ),
-                    );
-                }
-                true
-            }
-            Err(e) => {
-                handle_error(st, &e, "Couldn't create the work item");
-                false
-            }
-        };
-    };
-
-    let Some(before) = st
+pub async fn load_item(st: AppState, id: CardId) -> Result<ItemDetails, String> {
+    let client = st.client.peek().clone().ok_or("Not connected.")?;
+    let project = st
         .workspace
         .peek()
         .as_ref()
-        .and_then(|w| w.cards.get(&id).cloned())
-    else {
-        return false;
-    };
-    let mut changes = item.changes(Some(&before));
-    let reparent = parent != before.parent;
-    if changes.is_empty() && !reparent {
-        return true;
+        .map(|w| w.project.clone())
+        .ok_or("No board loaded.")?;
+    let dto = client.work_item(&project, id).await.map_err(|e| {
+        if matches!(e, AdoError::Unauthorized) {
+            unauthorized(st);
+        }
+        format!("Couldn't load #{id}: {e}")
+    })?;
+    if !st.pending.peek().contains(&id) {
+        store_server_copy(st, &dto, true);
     }
-    let mut doc = PatchDocument::update(before.rev);
+    let order_field = st
+        .workspace
+        .peek()
+        .as_ref()
+        .map(|w| w.scope.order_field.clone())
+        .unwrap_or_default();
+    let f = &dto.fields;
+    let person = |k: &str| {
+        f.get(k)
+            .and_then(|v| serde_json::from_value::<ado_client::IdentityRef>(v.clone()).ok())
+            .map(|i| Person::from(&i))
+    };
+    let when = |k: &str| {
+        f.get(k).and_then(Value::as_str).and_then(|s| {
+            OffsetDateTime::parse(s, &time::format_description::well_known::Rfc3339).ok()
+        })
+    };
+    Ok(ItemDetails {
+        card: Card::from_work_item(&dto, &order_field),
+        description: f
+            .get(fields::DESCRIPTION)
+            .and_then(Value::as_str)
+            .map(kanban_core::description::sanitize)
+            .unwrap_or_default(),
+        meta: ItemMeta {
+            changed_by: person(fields::CHANGED_BY),
+            changed: when(fields::CHANGED_DATE),
+            created_by: person(fields::CREATED_BY),
+            created: when(fields::CREATED_DATE),
+            web_url: client.work_item_web_url(&project, id),
+        },
+    })
+}
+
+/// How a dialog save went.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SaveOutcome {
+    Saved,
+    /// Someone else changed the item first; nothing was written and the card shows their version.
+    Conflict,
+    /// Already reported in a toast.
+    Failed,
+}
+
+/// Creates the dialog's item with its parent link. Returns the new id.
+pub async fn create_item(mut st: AppState, draft: &ItemDraft) -> Option<CardId> {
+    let client = st.client.peek().clone()?;
+    let project = st.workspace.peek().as_ref().map(|w| w.project.clone())?;
+    let mut doc = draft
+        .patch_fields(None)
+        .into_iter()
+        .fold(PatchDocument::create(), |d, (f, v)| d.field(&f, v));
+    if let Some(p) = draft.parent {
+        doc = doc.parent(&client.work_item_url(p));
+        // Tasks land in their parent's sprint, as on ADO's own board.
+        let iteration = st.workspace.peek().as_ref().and_then(|w| {
+            w.task_types
+                .contains(&draft.work_item_type)
+                .then(|| w.cards.get(&p).map(|c| c.iteration_path.clone()))
+                .flatten()
+        });
+        if let Some(it) = iteration.filter(|i| !i.is_empty()) {
+            doc = doc.field(fields::ITERATION_PATH, Value::String(it));
+        }
+    }
+    match client
+        .create_work_item(&project, &draft.work_item_type, &doc)
+        .await
+    {
+        Ok(dto) => {
+            let in_scope = st.workspace.write().as_mut().is_some_and(|ws| {
+                ws.upsert(std::slice::from_ref(&dto));
+                ws.cards.contains_key(&dto.id)
+            });
+            if in_scope {
+                toast(st, ToastKind::Info, format!("Created #{}", dto.id));
+            } else {
+                toast(
+                    st,
+                    ToastKind::Warn,
+                    format!(
+                        "Created #{}, but its area is outside this team's board.",
+                        dto.id
+                    ),
+                );
+            }
+            Some(dto.id)
+        }
+        Err(e) => {
+            handle_error(st, &e, "Couldn't create the work item");
+            None
+        }
+    }
+}
+
+/// Writes what changed between `original` (revision `rev`) and `draft`, re-parenting if the
+/// parent changed. The card updates at once and rolls back if ADO refuses.
+pub async fn update_item(
+    mut st: AppState,
+    id: CardId,
+    rev: u32,
+    original: &ItemDraft,
+    draft: &ItemDraft,
+) -> SaveOutcome {
+    let Some(client) = st.client.peek().clone() else {
+        return SaveOutcome::Failed;
+    };
+    let Some((project, before, people)) = st
+        .workspace
+        .peek()
+        .as_ref()
+        .and_then(|w| Some((w.project.clone(), w.cards.get(&id)?.clone(), assignees(w))))
+    else {
+        return SaveOutcome::Failed;
+    };
+    let changes = draft.patch_fields(Some(original));
+    let reparent = draft.parent != original.parent;
+    if changes.is_empty() && !reparent {
+        return SaveOutcome::Saved;
+    }
+    let mut doc = PatchDocument::update(rev);
     if reparent {
         // Relation indices come from the current item.
         match client.work_item(&project, id).await {
+            Ok(full) if full.rev != rev => {
+                store_server_copy(st, &full, true);
+                return SaveOutcome::Conflict;
+            }
             Ok(full) => {
-                if full.rev != before.rev {
-                    toast(
-                        st,
-                        ToastKind::Warn,
-                        format!("#{id} was changed by someone else. Showing the latest version."),
-                    );
-                    store_server_copy(st, &full, true);
-                    return false;
-                }
                 if let Some(i) = full
                     .relations
                     .iter()
@@ -771,21 +757,27 @@ pub async fn save_item(
                 {
                     doc = doc.remove_relation(i);
                 }
-                if let Some(p) = parent {
+                if let Some(p) = draft.parent {
                     doc = doc.parent(&client.work_item_url(p));
                 }
             }
             Err(e) => {
                 handle_error(st, &e, "Couldn't load the item");
-                return false;
+                return SaveOutcome::Failed;
             }
         }
     }
-    doc = changes.drain(..).fold(doc, |d, (f, v)| d.field(&f, v));
+    doc = changes.into_iter().fold(doc, |d, (f, v)| d.field(&f, v));
     if let Some(ws) = st.workspace.write().as_mut() {
         if let Some(c) = ws.cards.get_mut(&id) {
-            item.apply(c);
-            c.parent = parent;
+            c.title = draft.title.trim().to_owned();
+            c.parent = draft.parent;
+            c.tags.clone_from(&draft.tags);
+            c.state.clone_from(&draft.state);
+            c.priority = Some(draft.priority);
+            c.assigned_to = people.into_iter().find(|p| p.unique_name == draft.assignee);
+            c.target_date = draft.target_date;
+            c.area_path.clone_from(&draft.area);
         }
         ws.place();
     }
@@ -795,16 +787,14 @@ pub async fn save_item(
     match result {
         Ok(dto) => {
             store_server_copy(st, &dto, true);
-            true
+            SaveOutcome::Saved
         }
         Err(AdoError::Conflict { .. }) => {
-            toast(
-                st,
-                ToastKind::Warn,
-                format!("#{id} was changed by someone else. Showing the latest version."),
-            );
-            refetch(st, &client, &project, id).await;
-            false
+            if let Some(ws) = st.workspace.write().as_mut() {
+                ws.cards.insert(id, before);
+                ws.place();
+            }
+            SaveOutcome::Conflict
         }
         Err(e) => {
             if let Some(ws) = st.workspace.write().as_mut() {
@@ -812,7 +802,7 @@ pub async fn save_item(
                 ws.place();
             }
             handle_error(st, &e, &format!("Couldn't save #{id}"));
-            false
+            SaveOutcome::Failed
         }
     }
 }

@@ -147,6 +147,19 @@ impl AdoClient {
         url.to_string()
     }
 
+    /// The work item's page in the ADO web UI.
+    pub fn work_item_web_url(&self, project: &str, id: u32) -> String {
+        let mut url = self.config.base_url.clone();
+        if let Ok(mut seg) = url.path_segments_mut() {
+            seg.pop_if_empty()
+                .push(&self.config.organization)
+                .push(project)
+                .extend(["_workitems", "edit"])
+                .push(&id.to_string());
+        }
+        url.to_string()
+    }
+
     pub(crate) fn url(&self, req: &Request<'_>) -> Url {
         let mut url = self.config.base_url.clone();
         // Only the cloud splits hosts; a custom (on-premises) base URL serves everything.

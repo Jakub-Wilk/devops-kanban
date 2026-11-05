@@ -6,6 +6,9 @@
 //! the timer is read on Kanban mount, window focus, after start/stop and every few minutes,
 //! because the 7pace web UI or desktop client can change it. After any write the card is
 //! refetched from ADO a few seconds later, once 7pace has synced the new total.
+//!
+//! Stopping goes through the time dialog (`stop_and_log`): 7pace saves the track as a worklog
+//! itself, and the dialog's changes are then applied to that entry, so nothing is logged twice.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -13,7 +16,7 @@ use std::time::Duration;
 use dioxus::prelude::*;
 use kanban_core::CardId;
 use kanban_core::time::{
-    Activity, TimeEntry, TimerState, format_duration, parse_duration, tz_minutes, wire_timestamp,
+    Activity, TimeEntry, TimerState, format_duration, tz_minutes, wire_timestamp,
 };
 use sevenpace_client::models::{StartTracking, WorkLogWrite};
 use sevenpace_client::{SevenPaceClient, SevenPaceConfig, SevenPaceError, SevenPaceToken};
@@ -272,31 +275,6 @@ pub fn start(mut st: AppState, id: CardId) {
     });
 }
 
-/// Stops the running timer; 7pace saves it as a worklog.
-pub fn stop(mut st: AppState) {
-    let Some(client) = st.sevenpace.peek().clone() else {
-        return;
-    };
-    let running = st.time.peek().timer.as_ref().map(|t| t.work_item);
-    st.time.write().busy = true;
-    spawn(async move {
-        let result = client.stop_tracking().await;
-        st.time.write().busy = false;
-        match result {
-            Ok(_) => {
-                st.time.write().timer = None;
-                if let Some(id) = running {
-                    after_write(st, id);
-                }
-            }
-            Err(e) => {
-                report(st, &e, "Couldn't stop the timer");
-                refresh_timer(st);
-            }
-        }
-    });
-}
-
 /// Saves the dialog (create, or update when editing). Returns `Err` with a message for the form.
 pub async fn save_entry(st: AppState, form: TimeDialogState) -> Result<(), String> {
     let client = st
@@ -304,16 +282,8 @@ pub async fn save_entry(st: AppState, form: TimeDialogState) -> Result<(), Strin
         .peek()
         .clone()
         .ok_or("7pace isn't connected.")?;
-    let seconds =
-        parse_duration(&form.duration).ok_or("Enter a duration like 1:30, 1h 30m, 90m or 1.5.")?;
-    let start = start_of(&form, seconds)?;
-    let body = WorkLogWrite {
-        time_stamp: wire_timestamp(start),
-        length: seconds,
-        work_item_id: Some(form.card),
-        comment: Some(form.comment.trim().to_owned()).filter(|c| !c.is_empty()),
-        activity_type_id: Some(form.activity.clone()).filter(|a| !a.is_empty()),
-    };
+    let body = write_of(&form)?;
+    let seconds = body.length;
     let result = match &form.editing {
         Some(id) => client.update_worklog(id, &body).await,
         None => client.create_worklog(&body).await,
@@ -337,6 +307,102 @@ pub async fn save_entry(st: AppState, form: TimeDialogState) -> Result<(), Strin
     }
 }
 
+/// The dialog opened from Stop: stops the timer (7pace saves the track as a worklog itself, so
+/// no second entry is created), then finds that worklog and applies what the user changed in
+/// the dialog (duration, timing, activity, comment). Untouched, 7pace's exact length stays.
+pub async fn stop_and_log(mut st: AppState, form: TimeDialogState) -> Result<(), String> {
+    let client = st
+        .sevenpace
+        .peek()
+        .clone()
+        .ok_or("7pace isn't connected.")?;
+    let Some(timer) = st.time.peek().timer.clone() else {
+        // Stopped elsewhere meanwhile (7pace UI, desktop client): log it as a normal entry.
+        return save_entry(
+            st,
+            TimeDialogState {
+                from_timer: false,
+                ..form
+            },
+        )
+        .await;
+    };
+    let mut body = write_of(&form)?;
+    st.time.write().busy = true;
+    let stopped = client.stop_tracking().await;
+    st.time.write().busy = false;
+    if let Err(e) = stopped {
+        refresh_timer(st);
+        return Err(describe(&e));
+    }
+    st.time.write().timer = None;
+    let card = timer.work_item;
+    let started = timer.started.to_offset(local_offset());
+    let started = PrimitiveDateTime::new(started.date(), started.time());
+    let logged = client
+        .worklogs(&[card])
+        .await
+        .map_err(|e| format!("Stopped, but couldn't read the new entry: {}", describe(&e)))?;
+    let local = local_offset();
+    let entry = logged
+        .iter()
+        .filter_map(|d| TimeEntry::from_dto(d, local))
+        .filter(|e| e.work_item == Some(card))
+        .min_by_key(|e| (e.start - started).whole_seconds().abs())
+        .filter(|e| (e.start - started).whole_minutes().abs() <= 5);
+    let Some(entry) = entry else {
+        toast(
+            st,
+            ToastKind::Warn,
+            format!(
+                "Stopped. 7pace logged the timer on #{card}, but the entry wasn't found to apply your changes; edit it on the card."
+            ),
+        );
+        after_write(st, card);
+        return Ok(());
+    };
+    // Duration and timing untouched: keep 7pace's own start and exact length.
+    if form.minutes == form.timer_minutes && form.ends_now && form.date == now_local().date() {
+        body.time_stamp = wire_timestamp(entry.start);
+        body.length = entry.seconds;
+    }
+    let same = body.length == entry.seconds
+        && body.time_stamp == wire_timestamp(entry.start)
+        && body.comment == entry.comment
+        && (body.activity_type_id.is_none()
+            || body.activity_type_id == entry.activity.as_ref().map(|a| a.id.clone()));
+    if !same && let Err(e) = client.update_worklog(&entry.id, &body).await {
+        after_write(st, card);
+        return Err(format!(
+            "Stopped and logged, but your changes weren't applied: {}",
+            describe(&e)
+        ));
+    }
+    toast(
+        st,
+        ToastKind::Info,
+        format!("Logged {} on #{card}.", format_duration(body.length)),
+    );
+    after_write(st, card);
+    Ok(())
+}
+
+/// The worklog body for the dialog's values.
+fn write_of(form: &TimeDialogState) -> Result<WorkLogWrite, String> {
+    if form.minutes <= 0 {
+        return Err("Enter how long you worked.".into());
+    }
+    let seconds = form.minutes * 60;
+    let start = start_of(form, seconds)?;
+    Ok(WorkLogWrite {
+        time_stamp: wire_timestamp(start),
+        length: seconds,
+        work_item_id: Some(form.card),
+        comment: Some(form.comment.trim().to_owned()).filter(|c| !c.is_empty()),
+        activity_type_id: Some(form.activity.clone()).filter(|a| !a.is_empty()),
+    })
+}
+
 pub async fn delete_entry(st: AppState, card: CardId, id: String) -> Result<(), String> {
     let client = st
         .sevenpace
@@ -348,16 +414,10 @@ pub async fn delete_entry(st: AppState, card: CardId, id: String) -> Result<(), 
     Ok(())
 }
 
-/// The entry's start: the form's date and time, or "ends now" when the time is empty.
+/// The entry's start: the form's date at its start time, or ending now when "Ends now".
 fn start_of(form: &TimeDialogState, seconds: i64) -> Result<PrimitiveDateTime, String> {
-    let date = time::Date::parse(
-        form.date.trim(),
-        time::macros::format_description!("[year]-[month]-[day]"),
-    )
-    .map_err(|_| "Pick a date.".to_owned())?;
-    if form.start.trim().is_empty() {
-        let now = now_local();
-        let end = PrimitiveDateTime::new(date, now.time());
+    if form.ends_now {
+        let end = PrimitiveDateTime::new(form.date, now_local().time());
         return Ok(end - time::Duration::seconds(seconds));
     }
     let start = time::Time::parse(
@@ -365,7 +425,7 @@ fn start_of(form: &TimeDialogState, seconds: i64) -> Result<PrimitiveDateTime, S
         time::macros::format_description!("[hour]:[minute]"),
     )
     .map_err(|_| "Enter the start time as HH:MM.".to_owned())?;
-    Ok(PrimitiveDateTime::new(date, start))
+    Ok(PrimitiveDateTime::new(form.date, start))
 }
 
 /// Reloads the card's entries now and its ADO total once 7pace has synced it.

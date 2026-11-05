@@ -318,12 +318,78 @@ impl Workspace {
         self.states.color(&card.work_item_type, &card.state)
     }
 
+    /// The team's current sprint.
+    pub fn current_iteration(&self) -> Option<&Iteration> {
+        self.iterations.iter().find(|i| i.current)
+    }
+
+    /// Types an item of `work_item_type` can hang under (see [`parent_types`]).
+    pub fn parent_types(&self, work_item_type: &str) -> Vec<String> {
+        parent_types(&self.levels, &self.task_types, work_item_type)
+    }
+
+    /// The board column a `work_item_type` item in `state` shows in, by the board's state
+    /// mappings.
+    pub fn column_for_state(&self, work_item_type: &str, state: &str) -> Option<String> {
+        let level = self.level_of_type(work_item_type).map(|l| l.name.as_str());
+        let board = match level {
+            Some(l) => self.boards.get(l),
+            // Tasks have no board of their own.
+            None => None,
+        }?;
+        board
+            .column_for_state(work_item_type, state)
+            .map(|c| c.name.clone())
+    }
+
+    /// Tags on the loaded cards with how many cards use each, most used first. Tags compare
+    /// case-insensitively, as in ADO; the first spelling seen wins.
+    pub fn tag_counts(&self) -> Vec<(String, usize)> {
+        let mut by_key: HashMap<String, (String, usize)> = HashMap::new();
+        for tag in self.cards.values().flat_map(|c| &c.tags) {
+            by_key
+                .entry(tag.to_lowercase())
+                .or_insert_with(|| (tag.clone(), 0))
+                .1 += 1;
+        }
+        let mut out: Vec<(String, usize)> = by_key.into_values().collect();
+        out.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+        out
+    }
+
     /// The level a work item type belongs to.
     pub fn level_of_type(&self, work_item_type: &str) -> Option<&BacklogLevel> {
         self.levels
             .iter()
             .find(|l| l.work_item_types.iter().any(|t| t == work_item_type))
     }
+}
+
+/// Types an item of `work_item_type` can hang under: for tasks (and bugs shown as tasks) the
+/// requirement level, for backlog items every level above their own (a story under a feature
+/// or an epic). Empty for the top level.
+pub fn parent_types(
+    levels: &[BacklogLevel],
+    task_types: &[String],
+    work_item_type: &str,
+) -> Vec<String> {
+    if task_types.iter().any(|t| t == work_item_type) {
+        return levels
+            .iter()
+            .find(|l| !l.is_portfolio)
+            .map(|l| l.work_item_types.clone())
+            .unwrap_or_default();
+    }
+    let Some(i) = levels
+        .iter()
+        .position(|l| l.work_item_types.iter().any(|t| t == work_item_type))
+    else {
+        return Vec::new();
+    };
+    levels[..i]
+        .iter()
+        .flat_map(|l| l.work_item_types.iter().cloned())
+        .collect()
 }
 
 /// Type name → color (hex without `#`, lowercase).

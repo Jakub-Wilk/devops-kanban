@@ -10,8 +10,10 @@ straight back to Azure DevOps or 7pace. There is no server and no separate datab
 > aligned columns, expandable per row or per level, sortable by due date or priority), a kanban
 > (the team's real Features and Stories boards, with hideable columns, a per-person WIP meter and
 > "Move back" after a move) and a timeline, with drag and drop written back to Azure DevOps.
-> 7pace time tracking on kanban cards: start/stop the timer, add time, and edit your entries in
-> the card's expandable details. Row and card style (tint, accent bar, type icons) is set in
+> Items are created and edited in a two-column dialog (searchable parent, tags, description, state
+> with the column it moves to, and a list of unsaved changes). 7pace time tracking on kanban
+> cards: start/stop the timer (Stop lets you adjust what gets logged), add time, and edit your
+> entries in the card's expandable details. Row and card style (tint, accent bar, type icons) is set in
 > *Settings › Appearance*.
 
 ## Prerequisites

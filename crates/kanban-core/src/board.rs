@@ -139,6 +139,27 @@ impl Board {
             })
     }
 
+    /// The first column that maps `state` for `work_item_type`: where a card in that state lands.
+    pub fn column_for_state(&self, work_item_type: &str, state: &str) -> Option<&Column> {
+        self.columns
+            .iter()
+            .find(|c| c.state_mappings.get(work_item_type).map(String::as_str) == Some(state))
+    }
+
+    /// States a `work_item_type` card can take on this board: those mapped by the columns that
+    /// aren't `hidden`, in column order, each with the first such column.
+    pub fn visible_states(&self, work_item_type: &str, hidden: &[String]) -> Vec<(String, String)> {
+        let mut out: Vec<(String, String)> = Vec::new();
+        for c in self.visible_columns(hidden) {
+            if let Some(s) = c.state_mappings.get(work_item_type)
+                && !out.iter().any(|(x, _)| x == s)
+            {
+                out.push((s.clone(), c.name.clone()));
+            }
+        }
+        out
+    }
+
     /// The lane id a card is in (default lane when unset or unknown).
     pub fn lane_of(&self, card: &Card) -> String {
         card.board_lane

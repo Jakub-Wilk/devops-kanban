@@ -147,6 +147,41 @@ pub fn format_duration(secs: i64) -> String {
     }
 }
 
+/// Longest entry the time dialog takes: a day.
+pub const MAX_ENTRY_MINUTES: i64 = 24 * 60;
+
+/// The time dialog's rigid `H:MM` duration field. Digits fill in from the right, so typing
+/// `1`, `3`, `0` reads `0:01`, `0:13`, `1:30`; anything but digits is dropped. Empty for zero.
+pub fn hmm_from_input(input: &str) -> String {
+    let digits: String = input.chars().filter(char::is_ascii_digit).collect();
+    let digits = &digits[digits.len().saturating_sub(4)..];
+    match digits.parse::<u32>() {
+        Ok(0) | Err(_) => String::new(),
+        Ok(n) => format!("{}:{:02}", n / 100, n % 100),
+    }
+}
+
+/// Minutes in an `H:MM` value (`""` is zero). `None` for 60 or more minutes, or over a day.
+pub fn parse_hmm(s: &str) -> Option<i64> {
+    let s = s.trim();
+    if s.is_empty() {
+        return Some(0);
+    }
+    let (h, m) = s.split_once(':')?;
+    let (h, m): (i64, i64) = (h.parse().ok()?, m.parse().ok()?);
+    let total = h * 60 + m;
+    ((0..60).contains(&m) && h >= 0 && total <= MAX_ENTRY_MINUTES).then_some(total)
+}
+
+/// `1:05`; empty for zero.
+pub fn format_hmm(minutes: i64) -> String {
+    if minutes <= 0 {
+        String::new()
+    } else {
+        format!("{}:{:02}", minutes / 60, minutes % 60)
+    }
+}
+
 /// `0:42:10`, for a running timer.
 pub fn format_clock(secs: i64) -> String {
     let s = secs.max(0);
@@ -225,6 +260,26 @@ mod tests {
         assert_eq!(format_duration(2700), "45m");
         assert_eq!(format_duration(7200), "2h");
         assert_eq!(format_clock(2530), "0:42:10");
+    }
+
+    #[test]
+    fn rigid_hmm_field() {
+        assert_eq!(hmm_from_input("1"), "0:01");
+        assert_eq!(hmm_from_input("13"), "0:13");
+        assert_eq!(hmm_from_input("130"), "1:30");
+        assert_eq!(hmm_from_input("1:30"), "1:30");
+        assert_eq!(hmm_from_input("1:3"), "0:13");
+        assert_eq!(hmm_from_input("0130"), "1:30");
+        assert_eq!(hmm_from_input("12345"), "23:45");
+        assert_eq!(hmm_from_input("0"), "");
+        assert_eq!(hmm_from_input("x"), "");
+        assert_eq!(parse_hmm(""), Some(0));
+        assert_eq!(parse_hmm("1:30"), Some(90));
+        assert_eq!(parse_hmm("24:00"), Some(1440));
+        assert_eq!(parse_hmm("0:75"), None);
+        assert_eq!(parse_hmm("24:01"), None);
+        assert_eq!(format_hmm(65), "1:05");
+        assert_eq!(format_hmm(0), "");
     }
 
     #[test]

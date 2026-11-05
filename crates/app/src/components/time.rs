@@ -1,5 +1,7 @@
 //! 7pace time tracking UI: on each kanban card the timer and add-time actions (header), the total
-//! (footer) and the user's entries (when the card is expanded), the running-timer chip in the top bar (compact, widens on hover/focus), the add/edit time dialog, and `TimeKeeper`,
+//! (footer) and the user's entries (when the card is expanded), the running-timer chip in the
+//! top bar (compact, widens on hover/focus), the add/edit time dialog (also opened by Stop, to
+//! log the timer's time), and `TimeKeeper`,
 //! which connects at startup, ticks the clock while a timer runs and re-reads the timer on window
 //! focus and every few minutes.
 
@@ -9,15 +11,25 @@ use dioxus::desktop::tao::event::Event;
 use dioxus::desktop::{WindowEvent, use_wry_event_handler};
 use dioxus::prelude::*;
 use kanban_core::Card;
-use kanban_core::time::{TimeEntry, format_clock, format_duration, parse_duration};
+use kanban_core::time::{
+    MAX_ENTRY_MINUTES, TimeEntry, format_clock, format_duration, format_hmm, hmm_from_input,
+    parse_hmm,
+};
 
 use crate::components::icons;
+use crate::components::pickers::{Calendar, day_label, long_date, relative_day};
 use crate::components::widgets::{Icon, short_date};
 use crate::state::{AppState, TimeDialogState, use_app};
 use crate::time_tracking::{self, TIMER_REFRESH, now_local};
 
-/// Entries shown on a card before "Show all".
+/// Entries shown on a card before "Show all", and in the dialog's "Your time".
 const SHOWN_ENTRIES: usize = 3;
+/// "Starts at" before the user picks a time.
+const DEFAULT_START: &str = "09:00";
+/// The duration steps: a quarter hour, an hour, two hours.
+const STEPS: [i64; 6] = [15, 60, 120, -15, -60, -120];
+/// Activities in the dialog's "Recent" group.
+const RECENT_ACTIVITIES: usize = 3;
 
 /// Mounted once at the root.
 #[component]
@@ -69,40 +81,72 @@ pub fn EntryLoader(ids: Vec<kanban_core::CardId>) -> Element {
     rsx! {}
 }
 
-/// Opens the dialog to add time to `card`, or to edit `entry`.
+/// Opens the dialog to add time to `card` (empty), or to edit `entry`.
 pub fn open_time_dialog(mut st: AppState, card: &Card, entry: Option<&TimeEntry>) {
     let default_activity = st.time.peek().default_activity.clone().unwrap_or_default();
-    let fmt_date = time::macros::format_description!("[year]-[month]-[day]");
     let fmt_time = time::macros::format_description!("[hour]:[minute]");
     let state = match entry {
-        Some(e) => TimeDialogState {
-            card: card.id,
-            card_title: card.title.clone(),
-            editing: Some(e.id.clone()),
-            can_delete: e.can_delete,
-            date: e.start.date().format(fmt_date).unwrap_or_default(),
-            start: e.start.time().format(fmt_time).unwrap_or_default(),
-            duration: format_duration(e.seconds),
-            activity: e
-                .activity
-                .as_ref()
-                .map(|a| a.id.clone())
-                .unwrap_or(default_activity),
-            comment: e.comment.clone().unwrap_or_default(),
-        },
+        Some(e) => {
+            let minutes = (e.seconds + 30) / 60;
+            TimeDialogState {
+                card: card.id,
+                editing: Some(e.id.clone()),
+                can_delete: e.can_delete,
+                from_timer: false,
+                timer_minutes: 0,
+                date: e.start.date(),
+                minutes,
+                duration_text: format_hmm(minutes),
+                ends_now: false,
+                start: e.start.time().format(fmt_time).unwrap_or_default(),
+                activity: e
+                    .activity
+                    .as_ref()
+                    .map(|a| a.id.clone())
+                    .unwrap_or(default_activity),
+                comment: e.comment.clone().unwrap_or_default(),
+            }
+        }
         None => TimeDialogState {
             card: card.id,
-            card_title: card.title.clone(),
             editing: None,
             can_delete: false,
-            date: now_local().date().format(fmt_date).unwrap_or_default(),
-            start: String::new(),
-            duration: String::new(),
+            from_timer: false,
+            timer_minutes: 0,
+            date: now_local().date(),
+            minutes: 0,
+            duration_text: String::new(),
+            ends_now: true,
+            start: DEFAULT_START.into(),
             activity: default_activity,
             comment: String::new(),
         },
     };
     st.time_dialog.set(Some(state));
+}
+
+/// Stop: opens the dialog with the timer's time. The timer keeps running until the user
+/// confirms; Cancel leaves it running.
+pub fn open_stop_dialog(mut st: AppState) {
+    let Some(timer) = st.time.peek().timer.clone() else {
+        return;
+    };
+    let minutes = (timer.elapsed_secs(now_local()) / 60).clamp(1, MAX_ENTRY_MINUTES);
+    let activity = st.time.peek().default_activity.clone().unwrap_or_default();
+    st.time_dialog.set(Some(TimeDialogState {
+        card: timer.work_item,
+        editing: None,
+        can_delete: false,
+        from_timer: true,
+        timer_minutes: minutes,
+        date: now_local().date(),
+        minutes,
+        duration_text: format_hmm(minutes),
+        ends_now: true,
+        start: DEFAULT_START.into(),
+        activity,
+        comment: String::new(),
+    }));
 }
 
 /// Timer and "add time" for a kanban card's header. The tracked card shows its live clock and a
@@ -133,7 +177,7 @@ pub fn CardTimeActions(card: Card) -> Element {
                 aria_label: "Stop tracking",
                 onclick: move |e| {
                     e.stop_propagation();
-                    time_tracking::stop(st);
+                    open_stop_dialog(st);
                 },
                 Icon { svg: icons::STOP }
             }
@@ -312,7 +356,7 @@ pub fn TimerChip() -> Element {
                     disabled: busy,
                     "data-tip": "Stop tracking",
                     aria_label: "Stop tracking",
-                    onclick: move |_| time_tracking::stop(st),
+                    onclick: move |_| open_stop_dialog(st),
                     Icon { svg: icons::STOP }
                 }
             }
@@ -320,29 +364,199 @@ pub fn TimerChip() -> Element {
     }
 }
 
+/// Mounted inside `TimeKeeper`; renders while the dialog is open.
 #[component]
 fn TimeDialog() -> Element {
+    let st = use_app();
+    if st.time_dialog.read().is_none() {
+        return rsx! {};
+    }
+    rsx! { TimeDialogBody {} }
+}
+
+fn hm(t: time::Time) -> String {
+    format!("{:02}:{:02}", t.hour(), t.minute())
+}
+
+#[component]
+fn TimeDialogBody() -> Element {
     let mut st = use_app();
     let mut saving = use_signal(|| false);
     let mut error = use_signal(|| None::<String>);
     let mut confirm_delete = use_signal(|| false);
+    let mut cal_open = use_signal(|| false);
+    let mut act_open = use_signal(|| false);
+    let mut act_filter = use_signal(String::new);
     let Some(form) = st.time_dialog.read().clone() else {
         return rsx! {};
     };
+    let initial = use_hook(|| form.clone());
+    let card_id = form.card;
+    // "Your time on this item" needs the card's entries, which the kanban may not have loaded.
+    use_hook(move || time_tracking::load_entries(st, vec![card_id], false));
+
     let t = st.time.read();
     let activities = if t.activities_enabled {
         t.activities.clone()
     } else {
         Vec::new()
     };
+    let default_activity = t.default_activity.clone().unwrap_or_default();
+    let entries: Vec<TimeEntry> = t.entries.get(&card_id).cloned().unwrap_or_default();
+    let mut recent_ids: Vec<String> = Vec::new();
+    {
+        let mut all: Vec<&TimeEntry> = t.entries.values().flatten().collect();
+        all.sort_by_key(|e| std::cmp::Reverse(e.start));
+        for e in all {
+            if let Some(a) = &e.activity
+                && !recent_ids.contains(&a.id)
+            {
+                recent_ids.push(a.id.clone());
+            }
+            if recent_ids.len() == RECENT_ACTIVITIES {
+                break;
+            }
+        }
+    }
+    let timer_title = t.timer.as_ref().and_then(|x| x.title.clone());
     drop(t);
-    let parsed = parse_duration(&form.duration);
-    let feedback = match (form.duration.trim().is_empty(), parsed) {
-        (true, _) => "e.g. 1:30, 1h 30m, 90m or 1.5".to_owned(),
-        (false, Some(s)) => format!("= {}", format_duration(s)),
-        (false, None) => "Not a duration".to_owned(),
+
+    // The card, for the context strip.
+    let ws_guard = st.workspace.read();
+    let card = ws_guard
+        .as_ref()
+        .and_then(|w| w.cards.get(&card_id))
+        .cloned();
+    let (type_color, context, total) = match (ws_guard.as_ref(), &card) {
+        (Some(ws), Some(c)) => {
+            let parent = c
+                .parent
+                .and_then(|p| ws.cards.get(&p))
+                .map(|p| p.title.clone());
+            let ctx = [
+                Some(c.work_item_type.clone()),
+                parent,
+                Some(c.state.clone()),
+            ]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
+            .join(" · ");
+            (
+                ws.type_color(&c.work_item_type),
+                ctx,
+                c.completed_work
+                    .filter(|h| *h > 0.0)
+                    .map(|h| format_duration((h * 3600.0).round() as i64)),
+            )
+        }
+        _ => ("6b7686".to_owned(), String::new(), None),
     };
+    drop(ws_guard);
+    let card_title = card
+        .as_ref()
+        .map(|c| c.title.clone())
+        .or(timer_title)
+        .unwrap_or_default();
+
+    let parsed = parse_hmm(&form.duration_text);
+    let minutes = form.minutes;
+    let has_time = parsed.is_some() && minutes > 0;
     let editing = form.editing.is_some();
+    let now = now_local();
+    let today = now.date();
+    let start_time = time::Time::parse(
+        form.start.trim(),
+        time::macros::format_description!("[hour]:[minute]"),
+    )
+    .ok();
+    let span = time::Duration::minutes(minutes);
+    let (from, to) = if form.ends_now {
+        (Some(now.time() - span), Some(now.time()))
+    } else {
+        (start_time, start_time.map(|s| s + span))
+    };
+    let range = from.zip(to).map(|(a, b)| (hm(a), hm(b)));
+
+    let activity = activities
+        .iter()
+        .find(|a| a.id == form.activity)
+        .or_else(|| activities.iter().find(|a| a.id == default_activity))
+        .cloned();
+    let act_color = |c: &Option<String>| {
+        c.as_ref()
+            .map_or_else(|| "var(--faint)".to_owned(), |c| format!("#{c}"))
+    };
+    let filter = act_filter().trim().to_lowercase();
+    let matching: Vec<_> = activities
+        .iter()
+        .filter(|a| filter.is_empty() || a.name.to_lowercase().contains(&filter))
+        .cloned()
+        .collect();
+    let recent_acts: Vec<_> = if filter.is_empty() {
+        recent_ids
+            .iter()
+            .filter_map(|id| activities.iter().find(|a| a.id == *id).cloned())
+            .collect()
+    } else {
+        Vec::new()
+    };
+    let mut act_groups = Vec::new();
+    if !recent_acts.is_empty() {
+        act_groups.push(("Recent".to_owned(), recent_acts));
+    }
+    if !matching.is_empty() {
+        act_groups.push((
+            if filter.is_empty() {
+                "All activities".to_owned()
+            } else {
+                format!("Matches · {}", matching.len())
+            },
+            matching,
+        ));
+    }
+
+    // "Your time on this item": before and after this save.
+    let edited_secs = form
+        .editing
+        .as_ref()
+        .and_then(|id| entries.iter().find(|e| e.id == *id))
+        .map_or(0, |e| e.seconds);
+    let mine_before: i64 = entries.iter().map(|e| e.seconds).sum();
+    let mine_after = mine_before - edited_secs + if has_time { minutes * 60 } else { 0 };
+    let loaded = st.time.read().loaded.contains(&card_id);
+    let shown: Vec<TimeEntry> = entries.iter().take(SHOWN_ENTRIES).cloned().collect();
+    let act_name = activity.as_ref().map(|a| a.name.clone());
+    let act_dot = act_color(&activity.as_ref().and_then(|a| a.color.clone()));
+    let act_suffix = act_name
+        .as_ref()
+        .map(|n| format!(" · {n}"))
+        .unwrap_or_default();
+    let new_note = format!("New{act_suffix}");
+
+    let title = if form.from_timer {
+        "Stop and log time"
+    } else if editing {
+        "Edit time"
+    } else {
+        "Add time"
+    };
+    let dur_hint = match parsed {
+        None if form
+            .duration_text
+            .split(':')
+            .nth(1)
+            .and_then(|m| m.parse::<i64>().ok())
+            .is_some_and(|m| m >= 60) =>
+        {
+            Some(("hint bad", "Minutes go up to 59".to_owned()))
+        }
+        None => Some(("hint bad", "At most 24:00".to_owned())),
+        Some(_) if form.from_timer => Some(("hint", "From the timer · edit if needed".to_owned())),
+        Some(_) => None,
+    };
+    let dirty = form != initial;
+
     let mut set = move |f: &dyn Fn(&mut TimeDialogState)| {
         if let Some(d) = st.time_dialog.write().as_mut() {
             f(d);
@@ -351,26 +565,32 @@ fn TimeDialog() -> Element {
     let mut close = move || {
         if !*saving.peek() {
             st.time_dialog.set(None);
-            error.set(None);
-            confirm_delete.set(false);
         }
     };
-    let submit = move |e: FormEvent| {
-        e.prevent_default();
+    let save = move || {
         let Some(f) = st.time_dialog.peek().clone() else {
             return;
         };
+        if *saving.peek() || f.minutes <= 0 || parse_hmm(&f.duration_text).is_none() {
+            return;
+        }
         saving.set(true);
         error.set(None);
         spawn(async move {
-            let result = time_tracking::save_entry(st, f).await;
+            let result = if f.from_timer {
+                time_tracking::stop_and_log(st, f).await
+            } else {
+                time_tracking::save_entry(st, f).await
+            };
             saving.set(false);
             match result {
-                Ok(()) => close(),
+                Ok(()) => st.time_dialog.set(None),
                 Err(e) => error.set(Some(e)),
             }
         });
     };
+    let mut save_key = save;
+    let mut save_click = save;
     let delete = move |_| {
         if !confirm_delete() {
             confirm_delete.set(true);
@@ -387,7 +607,7 @@ fn TimeDialog() -> Element {
             let result = time_tracking::delete_entry(st, f.card, id).await;
             saving.set(false);
             match result {
-                Ok(()) => close(),
+                Ok(()) => st.time_dialog.set(None),
                 Err(e) => {
                     confirm_delete.set(false);
                     error.set(Some(e));
@@ -395,107 +615,375 @@ fn TimeDialog() -> Element {
             }
         });
     };
+
     rsx! {
         div {
             class: "overlay",
-            onclick: move |_| close(),
-            onkeydown: move |e| if e.key() == Key::Escape { close() },
-            form {
-                class: "dialog",
+            onclick: move |_| if !dirty { close() },
+            onkeydown: move |e| {
+                if e.key() == Key::Escape {
+                    close();
+                } else if e.key() == Key::Enter && (e.modifiers().ctrl() || e.modifiers().meta()) {
+                    save_key();
+                }
+            },
+            div {
+                class: "dlg",
                 role: "dialog",
                 aria_modal: "true",
                 aria_labelledby: "time-title",
                 onclick: move |e| e.stop_propagation(),
-                onsubmit: submit,
-                div { class: "head",
-                    div { style: "display: flex; flex-direction: column; gap: 2px; min-width: 0",
-                        h2 { id: "time-title", if editing { "Edit time" } else { "Add time" } }
-                        span { class: "sub", style: "overflow: hidden; text-overflow: ellipsis; white-space: nowrap", "#{form.card} {form.card_title}" }
+                div { class: "dlg-head",
+                    div {
+                        div { class: "eyebrow", "7pace Timetracker" }
+                        h2 { id: "time-title", "{title}" }
                     }
-                    button { class: "twirl", r#type: "button", aria_label: "Close", onclick: move |_| close(), Icon { svg: icons::CLOSE } }
+                    button { class: "x", r#type: "button", aria_label: "Close", onclick: move |_| close(), Icon { svg: icons::CLOSE } }
                 }
-                div { class: "body",
-                    label { class: "f",
-                        span { class: "lbl", "Duration" }
-                        input {
-                            class: "field",
-                            r#type: "text",
-                            required: true,
-                            placeholder: "1:30",
-                            value: "{form.duration}",
-                            onmounted: move |e| async move { let _ = e.set_focus(true).await; },
-                            oninput: move |e| set(&|f| f.duration = e.value()),
-                        }
-                        span { class: if parsed.is_none() && !form.duration.trim().is_empty() { "hint bad" } else { "hint" }, "{feedback}" }
+                div { class: "ctx", style: "--tc: #{type_color}",
+                    span { class: "stripe" }
+                    span { class: "t",
+                        b { span { class: "id", "#{card_id} " } "{card_title}" }
+                        if !context.is_empty() { small { "{context}" } }
                     }
-                    div { class: "grid2",
-                        label { class: "f",
-                            span { class: "lbl", "Date" }
-                            input {
-                                class: "field",
-                                r#type: "date",
-                                required: true,
-                                value: "{form.date}",
-                                oninput: move |e| set(&|f| f.date = e.value()),
-                            }
-                        }
-                        label { class: "f",
-                            span { class: "lbl", "Start" }
-                            input {
-                                class: "field",
-                                r#type: "time",
-                                value: "{form.start}",
-                                oninput: move |e| set(&|f| f.start = e.value()),
-                            }
-                            span { class: "hint", "Empty: the entry ends now." }
-                        }
+                    if let Some(tot) = total {
+                        span { class: "tot", "Tracked in total" b { "{tot}" } }
                     }
-                    if !activities.is_empty() {
-                        label { class: "f",
-                            span { class: "lbl", "Activity" }
-                            span { class: "select-wrap",
-                                select {
-                                    class: "field",
-                                    onchange: move |e| set(&|f| f.activity = e.value()),
-                                    for a in activities {
-                                        option { key: "{a.id}", value: "{a.id}", selected: form.activity == a.id, "{a.name}" }
+                }
+
+                div { class: "tbody",
+                    div { class: "row2",
+                        div { class: "fld",
+                            div { class: "fld-top",
+                                label { class: "lbl", r#for: "time-dur", "How long" }
+                                if let Some((class, text)) = dur_hint { span { class, "{text}" } }
+                            }
+                            div { class: "durbox",
+                                input {
+                                    id: "time-dur",
+                                    class: "in",
+                                    r#type: "text",
+                                    inputmode: "numeric",
+                                    maxlength: "5",
+                                    placeholder: "0:00",
+                                    "aria-description": "Hours and minutes",
+                                    value: "{form.duration_text}",
+                                    onmounted: move |e| async move { let _ = e.set_focus(true).await; },
+                                    oninput: move |e| {
+                                        let text = hmm_from_input(&e.value());
+                                        set(&move |f| {
+                                            if let Some(m) = parse_hmm(&text) {
+                                                f.minutes = m;
+                                            }
+                                            f.duration_text = text.clone();
+                                        });
+                                    },
+                                }
+                            }
+                            div { class: "qgrid", role: "group", aria_label: "Add or remove time",
+                                for d in STEPS {
+                                    {
+                                        let label = format!("{}{}", if d > 0 { "+" } else { "−" }, format_duration(d.abs() * 60));
+                                        let next = minutes + d;
+                                        rsx! {
+                                            button {
+                                                key: "{d}",
+                                                class: if d > 0 { "qchip" } else { "qchip minus" },
+                                                r#type: "button",
+                                                aria_label: if d > 0 { "Add {format_duration(d * 60)}" } else { "Remove {format_duration(-d * 60)}" },
+                                                disabled: !(0..=MAX_ENTRY_MINUTES).contains(&next),
+                                                onclick: move |_| set(&move |f| {
+                                                    f.minutes = (f.minutes + d).clamp(0, MAX_ENTRY_MINUTES);
+                                                    f.duration_text = format_hmm(f.minutes);
+                                                }),
+                                                "{label}"
+                                            }
+                                        }
                                     }
                                 }
-                                span { class: "chev", Icon { svg: icons::CHEVRON_DOWN } }
+                            }
+                        }
+                        div { class: "fld",
+                            span { class: "lbl", id: "time-timing", "Timing" }
+                            div { class: "timing", role: "radiogroup", aria_labelledby: "time-timing",
+                                label { class: if form.ends_now { "trow on" } else { "trow" },
+                                    input {
+                                        r#type: "radio",
+                                        name: "timing",
+                                        checked: form.ends_now,
+                                        onchange: move |_| set(&|f| f.ends_now = true),
+                                    }
+                                    "Ends now"
+                                    if form.ends_now && has_time {
+                                        if let Some((a, b)) = range.clone() { span { class: "muted", "{a}–{b}" } }
+                                    }
+                                }
+                                label { class: if form.ends_now { "trow" } else { "trow on" },
+                                    input {
+                                        r#type: "radio",
+                                        name: "timing",
+                                        checked: !form.ends_now,
+                                        onchange: move |_| set(&|f| f.ends_now = false),
+                                    }
+                                    "Starts at"
+                                    input {
+                                        class: "tm",
+                                        r#type: "time",
+                                        aria_label: "Start time",
+                                        value: "{form.start}",
+                                        onfocus: move |_| set(&|f| f.ends_now = false),
+                                        oninput: move |e| {
+                                            let v = e.value();
+                                            set(&move |f| {
+                                                f.start = v.clone();
+                                                f.ends_now = false;
+                                            });
+                                        },
+                                    }
+                                }
+                            }
+                            if has_time {
+                                if let Some((a, b)) = range.clone() { span { class: "hint", "Logs {a} → {b}, local time" } }
                             }
                         }
                     }
-                    label { class: "f",
-                        span { class: "lbl", "Comment" }
-                        textarea {
-                            class: "field",
-                            rows: "2",
-                            value: "{form.comment}",
-                            oninput: move |e| set(&|f| f.comment = e.value()),
+
+                    div { class: "fld",
+                        span { class: "lbl", id: "time-date-l", "Date" }
+                        div { class: "datefld anchor",
+                            button {
+                                class: "step",
+                                r#type: "button",
+                                aria_label: "Previous day",
+                                onclick: move |_| set(&|f| f.date = f.date.previous_day().unwrap_or(f.date)),
+                                Icon { svg: icons::BACK }
+                            }
+                            button {
+                                class: if cal_open() { "datebtn open" } else { "datebtn" },
+                                r#type: "button",
+                                aria_haspopup: "dialog",
+                                aria_expanded: "{cal_open()}",
+                                aria_labelledby: "time-date-l",
+                                onclick: move |_| cal_open.toggle(),
+                                Icon { svg: icons::CALENDAR_16 }
+                                "{long_date(form.date)}"
+                                span { class: "rel", "{relative_day(form.date)}" }
+                            }
+                            button {
+                                class: "step",
+                                r#type: "button",
+                                aria_label: "Next day",
+                                disabled: form.date >= today,
+                                onclick: move |_| set(&move |f| f.date = f.date.next_day().filter(|d| *d <= today).unwrap_or(f.date)),
+                                Icon { svg: icons::CHEVRON_RIGHT }
+                            }
+                            if cal_open() {
+                                div { class: "popover-backdrop", onclick: move |_| cal_open.set(false) }
+                                div {
+                                    class: "menu",
+                                    onkeydown: move |e| if e.key() == Key::Escape {
+                                        e.stop_propagation();
+                                        cal_open.set(false);
+                                    },
+                                    Calendar {
+                                        value: Some(form.date),
+                                        max: Some(today),
+                                        onpick: move |d| {
+                                            set(&move |f| f.date = d);
+                                            cal_open.set(false);
+                                        },
+                                    }
+                                }
+                            }
                         }
                     }
+
+                    if !activities.is_empty() {
+                        div { class: "fld",
+                            span { class: "lbl", id: "time-act-l", "Activity" }
+                            div { class: "anchor",
+                                button {
+                                    class: if act_open() { "selectlike open" } else { "selectlike" },
+                                    r#type: "button",
+                                    aria_haspopup: "listbox",
+                                    aria_expanded: "{act_open()}",
+                                    aria_labelledby: "time-act-l",
+                                    onclick: move |_| {
+                                        act_open.toggle();
+                                        act_filter.set(String::new());
+                                    },
+                                    span { class: "act", style: "--c: {act_dot}" }
+                                    span { class: "grow", "{act_name.clone().unwrap_or_default()}" }
+                                    span { class: "chev", Icon { svg: icons::CHEVRON_DOWN } }
+                                }
+                                if act_open() {
+                                    div { class: "popover-backdrop", onclick: move |_| act_open.set(false) }
+                                    div {
+                                        class: "menu",
+                                        onkeydown: move |e| if e.key() == Key::Escape {
+                                            e.stop_propagation();
+                                            act_open.set(false);
+                                        },
+                                        label { class: "srch",
+                                            Icon { svg: icons::SEARCH }
+                                            input {
+                                                r#type: "text",
+                                                placeholder: "Type to filter {activities.len()} activities",
+                                                aria_label: "Filter activities",
+                                                value: "{act_filter}",
+                                                onmounted: move |e| async move { let _ = e.set_focus(true).await; },
+                                                oninput: move |e| act_filter.set(e.value()),
+                                            }
+                                        }
+                                        div { class: "scroll", role: "listbox", aria_labelledby: "time-act-l",
+                                            for (name, items) in act_groups {
+                                                div { key: "{name}", class: "grp", role: "presentation", "{name}" }
+                                                for a in items {
+                                                    {
+                                                        let id = a.id.clone();
+                                                        let on = activity.as_ref().is_some_and(|x| x.id == a.id);
+                                                        rsx! {
+                                                            button {
+                                                                key: "{name}-{a.id}",
+                                                                class: if on { "item on" } else { "item" },
+                                                                r#type: "button",
+                                                                role: "option",
+                                                                aria_selected: "{on}",
+                                                                onclick: move |_| {
+                                                                    let id = id.clone();
+                                                                    set(&move |f| f.activity = id.clone());
+                                                                    act_open.set(false);
+                                                                },
+                                                                span { class: "act", style: "--c: {act_color(&a.color)}" }
+                                                                span { class: "grow", "{a.name}" }
+                                                                if a.id == default_activity { small { "default" } }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            if !filter.is_empty() && activities.iter().all(|a| !a.name.to_lowercase().contains(&filter)) {
+                                                div { class: "empty", "No activity matches “{act_filter}”." }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    div { class: "fld",
+                        div { class: "fld-top",
+                            label { class: "lbl", r#for: "time-comment", "Comment" }
+                            span { class: "req", "Optional" }
+                        }
+                        textarea {
+                            id: "time-comment",
+                            class: "in",
+                            rows: "2",
+                            placeholder: "What did you work on?",
+                            value: "{form.comment}",
+                            oninput: move |e| {
+                                let v = e.value();
+                                set(&move |f| f.comment = v.clone());
+                            },
+                        }
+                    }
+
+                    div { class: "fld",
+                        div { class: "fld-top",
+                            span { class: "lbl", "Your time on this item" }
+                            if has_time && mine_after != mine_before {
+                                span { class: "hint", "{format_duration(mine_before)} → " b { "{format_duration(mine_after)}" } }
+                            } else {
+                                span { class: "hint", "{format_duration(mine_before)}" }
+                            }
+                        }
+                        div { class: "log",
+                            if has_time && !editing {
+                                div { class: "log-row new",
+                                    span { class: "act", style: "--c: {act_dot}" }
+                                    span { "{short_date(form.date)}" }
+                                    span { class: "len", "{format_duration(minutes * 60)}" }
+                                    span { class: "n", "{new_note}" }
+                                }
+                            }
+                            for e in shown {
+                                {
+                                    let is_edited = form.editing.as_ref() == Some(&e.id);
+                                    let (dot, day, len, note) = if is_edited {
+                                        (
+                                            act_dot.clone(),
+                                            short_date(form.date),
+                                            format_duration(minutes * 60),
+                                            format!("Editing{act_suffix}"),
+                                        )
+                                    } else {
+                                        (
+                                            act_color(&e.activity.as_ref().and_then(|a| a.color.clone())),
+                                            short_date(e.start.date()),
+                                            format_duration(e.seconds),
+                                            e.comment.clone().or_else(|| e.activity.as_ref().map(|a| a.name.clone())).unwrap_or_default(),
+                                        )
+                                    };
+                                    rsx! {
+                                        div { key: "{e.id}", class: if is_edited { "log-row new" } else { "log-row" },
+                                            span { class: "act", style: "--c: {dot}" }
+                                            span { "{day}" }
+                                            span { class: "len", "{len}" }
+                                            span { class: "n", "{note}" }
+                                        }
+                                    }
+                                }
+                            }
+                            if entries.is_empty() && !(has_time && !editing) {
+                                div { class: "none", if loaded { "You haven't logged time on this item yet." } else { "Loading…" } }
+                            }
+                        }
+                    }
+
                     if let Some(e) = error() {
-                        div { class: "note err", Icon { svg: icons::ALERT } span { "{e}" } }
+                        div { class: "banner err", style: "margin: 0", role: "alert",
+                            span { class: "bi", Icon { svg: icons::ALERT } }
+                            span { class: "grow", "{e}" }
+                        }
                     }
                 }
-                div { class: "foot",
+
+                div { class: "dlg-foot",
+                    p { class: "summary",
+                        if has_time {
+                            if let Some((a, b)) = range.clone() {
+                                "Logs "
+                                b { "{format_duration(minutes * 60)}" }
+                                if let Some(n) = act_name.clone() {
+                                    " of "
+                                    b { "{n}" }
+                                }
+                                " on "
+                                b { "{day_label(form.date)}, {a}–{b}" }
+                                "."
+                            }
+                        }
+                    }
                     if editing && form.can_delete {
                         button {
-                            class: if confirm_delete() { "ghost danger" } else { "ghost" },
+                            class: if confirm_delete() { "btn danger left" } else { "btn left" },
                             r#type: "button",
-                            style: "margin-right: auto",
                             disabled: saving(),
                             onclick: delete,
                             if confirm_delete() { "Really delete?" } else { "Delete" }
                         }
                     }
-                    button { class: "ghost", r#type: "button", onclick: move |_| close(), "Cancel" }
+                    button { class: "btn", r#type: "button", onclick: move |_| close(), "Cancel" }
                     button {
-                        class: "primary",
-                        r#type: "submit",
-                        disabled: saving() || parsed.is_none(),
+                        class: "btn primary",
+                        r#type: "button",
+                        disabled: saving() || !has_time || (form.from_timer && st.time.read().busy),
+                        onclick: move |_| save_click(),
                         if saving() { span { class: "spinner" } }
-                        if editing { "Save" } else { "Add time" }
+                        if form.from_timer { "Stop and log" } else if editing { "Save" } else { "Add time" }
+                        kbd { "Ctrl ↵" }
                     }
                 }
             }

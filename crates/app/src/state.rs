@@ -2,7 +2,8 @@
 //!
 //! Holds: settings, the ADO client, connection/load status, the loaded [`Workspace`] (board
 //! configs + cards), ids with a write in flight (for optimistic updates and to keep sync off
-//! them), the transient drag state, the open dialogs and toasts, and 7pace time tracking (client,
+//! them), the transient drag state, the open dialogs (item: draft, original, conflict; time) and
+//! toasts, and 7pace time tracking (client,
 //! the user's entries per card, the running timer). Every field is a `Signal`, so
 //! `AppState` is `Copy` and can move into event handlers and tasks.
 
@@ -13,9 +14,9 @@ use dioxus::core::Task;
 use dioxus::prelude::*;
 use kanban_core::sync::InFlight;
 use kanban_core::time::{Activity, TimeEntry, TimerState};
-use kanban_core::{CardId, Settings, Workspace};
+use kanban_core::{CardId, ItemDraft, ItemField, Person, Settings, Workspace};
 use sevenpace_client::SevenPaceClient;
-use time::OffsetDateTime;
+use time::{Date, OffsetDateTime};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Status {
@@ -75,28 +76,54 @@ pub struct MoveBack {
     pub index: usize,
 }
 
-/// The new/edit dialog.
+/// The new/edit work item dialog.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DialogState {
     /// `None` = create.
     pub editing: Option<CardId>,
     /// Creating/editing a root (epic) rather than a work item.
     pub is_root: bool,
-    pub form: ItemForm,
+    /// What ADO has (edit) or the starting values (new). `form` minus this is the unsaved
+    /// changes, and only those are written.
+    pub original: ItemDraft,
+    pub form: ItemDraft,
+    /// The revision `original` came from; the PATCH tests it.
+    pub rev: u32,
+    /// Edit: the full item (description, who changed it) has loaded.
+    pub loaded: bool,
+    /// Edit: the full item couldn't be loaded (the description stays read-only).
+    pub load_error: Option<String>,
+    pub meta: Option<ItemMeta>,
+    /// HTML the description editor starts with. The editor owns its content after that; it is
+    /// read back only when saving.
+    pub desc_initial: String,
+    /// Bumped to remount the editor with `desc_initial`.
+    pub desc_key: u32,
+    /// The user typed in the description editor.
+    pub desc_dirty: bool,
+    /// Set after a save hit a concurrent edit; the form was rebased onto the new revision.
+    pub conflict: Option<Conflict>,
+    /// New: keep the dialog open for the next item after creating one.
+    pub create_another: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Default)]
-pub struct ItemForm {
-    pub title: String,
-    pub work_item_type: String,
-    pub parent: Option<CardId>,
-    pub area: String,
-    pub priority: u8,
-    /// `unique_name`, empty = unassigned.
-    pub assignee: String,
-    /// `YYYY-MM-DD`, empty = none.
-    pub target_date: String,
-    pub state: String,
+/// Who touched the item, for the edit dialog's header.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ItemMeta {
+    pub changed_by: Option<Person>,
+    pub changed: Option<OffsetDateTime>,
+    pub created_by: Option<Person>,
+    pub created: Option<OffsetDateTime>,
+    /// The item in the ADO web UI.
+    pub web_url: String,
+}
+
+/// A save that hit someone else's edit.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Conflict {
+    pub by: Option<String>,
+    /// What they changed.
+    pub fields: Vec<ItemField>,
 }
 
 /// 7pace time tracking (see `time_tracking.rs`).
@@ -120,20 +147,27 @@ pub struct TimeTracking {
     pub busy: bool,
 }
 
-/// The add/edit time dialog. Form fields are the raw input values.
+/// The add/edit time dialog.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TimeDialogState {
     pub card: CardId,
-    pub card_title: String,
     /// Worklog uuid when editing.
     pub editing: Option<String>,
     pub can_delete: bool,
-    /// `YYYY-MM-DD`.
-    pub date: String,
-    /// `HH:MM`; empty = ends now.
+    /// Opened from Stop: saving stops the timer (7pace logs it) and then applies the form to
+    /// that entry.
+    pub from_timer: bool,
+    /// From Stop: the timer's minutes when the dialog opened (unchanged = keep 7pace's length).
+    pub timer_minutes: i64,
+    /// The day the work was done.
+    pub date: Date,
+    pub minutes: i64,
+    /// The duration field as typed (`H:MM`); follows `minutes` when a step button is used.
+    pub duration_text: String,
+    /// The entry ends now; otherwise it starts at `start`.
+    pub ends_now: bool,
+    /// `HH:MM`.
     pub start: String,
-    /// Free text, see `kanban_core::time::parse_duration`.
-    pub duration: String,
     /// Activity type id; empty = the user's default.
     pub activity: String,
     pub comment: String,
