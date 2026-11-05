@@ -5,6 +5,10 @@
 //! children (features first in order, each followed by its stories). Tasks are not children:
 //! they are kept per parent in `tasks`, so epic rows, progress and filters ignore them. Progress
 //! counts children whose state category is Resolved or Completed.
+//!
+//! Items that are neither roots nor tasks and have no loaded parent (one-off items, or ones whose
+//! parent is outside the board) are `orphans`: tops of their own small trees, with their
+//! descendants in `children` like a root's, but with no root in `root_of`.
 
 use std::collections::{HashMap, HashSet};
 
@@ -23,6 +27,10 @@ pub struct Hierarchy {
     pub root_of: HashMap<CardId, CardId>,
     /// Parent → its tasks, in backlog order.
     pub tasks: HashMap<CardId, Vec<CardId>>,
+    /// Backlog items with no loaded parent, in backlog order (their descendants are in
+    /// `children`).
+    #[serde(default)]
+    pub orphans: Vec<CardId>,
 }
 
 impl Hierarchy {
@@ -78,6 +86,33 @@ impl Hierarchy {
             }
             out.children.insert(root.id, list);
         }
+        // Backlog items no root reaches: no parent, or a parent that isn't loaded.
+        let mut orphans: Vec<&Card> = cards
+            .values()
+            .filter(|c| !root_types.contains(&c.work_item_type))
+            .filter(|c| !task_types.contains(&c.work_item_type))
+            .filter(|c| c.parent.is_none_or(|p| !cards.contains_key(&p)))
+            .collect();
+        orphans.sort_by(|a, b| order_cmp(a, b));
+        for top in &orphans {
+            let mut list = Vec::new();
+            let mut seen = HashSet::from([top.id]);
+            let mut stack: Vec<(CardId, u8)> = kids
+                .get(&top.id)
+                .map(|v| v.iter().rev().map(|c| (c.id, 1)).collect())
+                .unwrap_or_default();
+            while let Some((id, depth)) = stack.pop() {
+                if !seen.insert(id) {
+                    continue;
+                }
+                list.push((id, depth));
+                if let Some(grand) = kids.get(&id) {
+                    stack.extend(grand.iter().rev().map(|c| (c.id, depth.saturating_add(1))));
+                }
+            }
+            out.children.insert(top.id, list);
+        }
+        out.orphans = orphans.iter().map(|c| c.id).collect();
         for (parent, list) in tasks {
             if let Some(&root) = out
                 .root_of

@@ -261,6 +261,8 @@ main.panel { padding-top: var(--s5); padding-bottom: 48px; display: flex; flex-d
 .hsort:hover, .hsort.on { color: var(--text); }
 .lrow { position: relative; min-height: 48px; border-top: 1px solid var(--line); animation: fadeUp .3s var(--ease) both; animation-delay: calc(var(--i, 0) * 18ms); box-shadow: inset 4px 0 0 var(--tc, transparent); }
 .lhead + .lrow { border-top: 0; }
+/* "Without a parent": items with no epic above them, after the epics. */
+.lgroup { display: flex; align-items: center; gap: var(--s2); min-height: 36px; padding: 0 var(--s4); border-top: 1px solid var(--line-strong); background: var(--surface); color: var(--faint); font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
 .lrow.root { min-height: 56px; }
 .lrow.child { background: var(--surface); }
 .lrow.task { min-height: 40px; }

@@ -115,6 +115,42 @@ pub fn epic_rows<'a>(
         .collect()
 }
 
+/// Backlog items without a parent ([`Hierarchy::orphans`]), each with its matching descendants,
+/// for the List's "without a parent" group. An orphan shows when it or something below it
+/// matches the work item filters and the search. With an epic state filter they're left out:
+/// they have no epic.
+pub fn orphan_rows(
+    ws: &Workspace,
+    hierarchy: &Hierarchy,
+    prefs: &TabFilters,
+    iteration: Option<&str>,
+    text: impl Fn(&Card) -> bool,
+) -> Vec<(CardId, Vec<CardId>)> {
+    if !prefs.epic_states.is_empty() {
+        return Vec::new();
+    }
+    let me = ws.me.as_ref();
+    hierarchy
+        .orphans
+        .iter()
+        .filter_map(|id| ws.cards.get(id))
+        .filter_map(|top| {
+            let kids: Vec<&Card> = hierarchy
+                .children
+                .get(&top.id)
+                .into_iter()
+                .flatten()
+                .filter_map(|(id, _)| ws.cards.get(id))
+                .filter(|c| prefs.matches_item(c, iteration, me))
+                .collect();
+            let itself = prefs.matches_item(top, iteration, me);
+            let text_ok = text(top) || kids.iter().any(|c| text(c));
+            ((itself || !kids.is_empty()) && text_ok)
+                .then(|| (top.id, kids.iter().map(|c| c.id).collect()))
+        })
+        .collect()
+}
+
 /// The one person every card is assigned to, if there is exactly one. `None` when there are no
 /// cards, any card is unassigned, or two people appear. The kanban's WIP meter only makes sense
 /// for one person's cards.
@@ -151,6 +187,8 @@ pub struct ListRow {
     /// Shown only because something below it matches the filters.
     pub context: bool,
     pub task: bool,
+    /// In the "without a parent" group (see [`Hierarchy::orphans`]), after the roots.
+    pub orphan: bool,
 }
 
 /// The List's levels, top down: the root portfolio level, the levels below it, then tasks.
@@ -168,8 +206,9 @@ pub fn list_levels(ws: &Workspace) -> Vec<(String, Vec<String>)> {
 }
 
 /// The List as a flat tree: each epic from [`epic_rows`], then its descendants depth-first, each
-/// followed by its tasks. Descendants that don't match the filters still show (as `context`)
-/// when something below them does.
+/// followed by its tasks; then the items without a parent ([`orphan_rows`], `orphan` set) the
+/// same way. Descendants that don't match the filters still show (as `context`) when something
+/// below them does.
 pub fn list_rows(
     ws: &Workspace,
     hierarchy: &Hierarchy,
@@ -177,7 +216,7 @@ pub fn list_rows(
     iteration: Option<&str>,
     text: impl Fn(&Card) -> bool,
 ) -> Vec<ListRow> {
-    let matched: Vec<(CardId, Vec<CardId>)> = epic_rows(ws, hierarchy, prefs, iteration, text)
+    let matched: Vec<(CardId, Vec<CardId>)> = epic_rows(ws, hierarchy, prefs, iteration, &text)
         .into_iter()
         .map(|(e, kids)| (e.id, kids.into_iter().map(|(c, _)| c.id).collect()))
         .collect();
@@ -188,7 +227,14 @@ pub fn list_rows(
             .position(|(_, types)| types.contains(&c.work_item_type))
             .unwrap_or(levels.len().saturating_sub(1))
     };
-    tree_rows(&ws.cards, hierarchy, &matched, &ws.task_types, rank)
+    let mut rows = tree_rows(&ws.cards, hierarchy, &matched, &ws.task_types, rank);
+    let orphans = orphan_rows(ws, hierarchy, prefs, iteration, &text);
+    let mut tail = tree_rows(&ws.cards, hierarchy, &orphans, &ws.task_types, rank);
+    for r in &mut tail {
+        r.orphan = true;
+    }
+    rows.extend(tail);
+    rows
 }
 
 /// [`list_rows`] without the filtering: `matched` is each root with its matching descendants.
@@ -211,6 +257,7 @@ pub fn tree_rows(
                     has_children: false,
                     context: false,
                     task: true,
+                    orphan: false,
                 });
             }
         }
@@ -239,6 +286,7 @@ pub fn tree_rows(
             has_children: false,
             context: false,
             task: false,
+            orphan: false,
         });
         push_tasks(&mut out, *root, 0);
         for (id, depth) in hierarchy.children.get(root).into_iter().flatten() {
@@ -255,6 +303,7 @@ pub fn tree_rows(
                 has_children: false,
                 context,
                 task: task_types.contains(&c.work_item_type),
+                orphan: false,
             });
             if !context {
                 push_tasks(&mut out, *id, *depth);
@@ -431,6 +480,36 @@ mod tests {
             .iter()
             .position(|t| *t == c.work_item_type)
             .unwrap_or(3)
+    }
+
+    #[test]
+    fn parentless_items_are_orphans_with_their_own_trees() {
+        let (mut cards, _) = tree();
+        cards.extend([
+            // One-off feature with a story and a task below it.
+            node(10, None, "Feature", 3.0),
+            node(11, Some(10), "User Story", 1.0),
+            node(12, Some(11), "Task", 1.0),
+            // A story whose parent isn't loaded, and a parentless one.
+            node(20, Some(999), "User Story", 2.0),
+            node(21, None, "User Story", 1.0),
+            // A parentless task is not a backlog item: it stays out.
+            node(30, None, "Task", 1.0),
+        ]);
+        let h = Hierarchy::build(&cards, &["Epic".into()], &["Task".into()]);
+        assert_eq!(h.roots, [1]);
+        assert_eq!(h.orphans, [21, 20, 10], "backlog order");
+        assert_eq!(h.children[&10], [(11, 1)]);
+        assert_eq!(h.tasks[&11], [12]);
+        // Orphan trees have no epic.
+        assert!(!h.root_of.contains_key(&11));
+
+        let rows = tree_rows(&cards, &h, &[(10, vec![11])], &["Task".into()], rank);
+        let got: Vec<(CardId, u8, bool)> = rows
+            .iter()
+            .map(|r| (r.id, r.depth, r.has_children))
+            .collect();
+        assert_eq!(got, [(10, 0, true), (11, 1, true), (12, 2, false)]);
     }
 
     #[test]

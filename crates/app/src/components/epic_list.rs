@@ -1,7 +1,9 @@
 //! "List" tab: the full backlog tree in backlog order — epics, then each level below them down to
 //! tasks — every row with children collapsible on its own, plus "Expand down to <level>" to set
 //! every row at once. Levels come from the team's backlog configuration. Filters keep the
-//! ancestors of matching items as dimmed context rows.
+//! ancestors of matching items as dimmed context rows. Items without a parent (one-off items, or
+//! a parent outside the board) follow the epics in a "Without a parent" group, with their own
+//! subtrees.
 //! In backlog order (the default) rows can be dragged to reorder among siblings with the same
 //! parent (never reparented), which goes through `workitemsorder`. Sorting by target date or
 //! priority (click the Due or Pri header) reorders siblings locally and turns dragging off.
@@ -84,23 +86,27 @@ pub fn EpicList(search_focus: Signal<Option<std::rc::Rc<MountedData>>>) -> Eleme
     let rows = match sort {
         ListSort::Backlog => rows,
         // No date / no priority last; ties keep backlog order.
+        // Items without a parent stay in their group after the epics (the `orphan` key first).
         ListSort::TargetDate => filters::sort_siblings(rows, |r| {
             let d = ws.cards.get(&r.id).and_then(|c| c.target_date);
-            (d.is_none(), d)
+            (r.orphan, d.is_none(), d)
         }),
         ListSort::Priority => filters::sort_siblings(rows, |r| {
-            ws.cards
+            let p = ws
+                .cards
                 .get(&r.id)
                 .and_then(|c| c.priority)
                 .filter(|p| *p > 0)
-                .unwrap_or(u8::MAX)
+                .unwrap_or(u8::MAX);
+            (r.orphan, p)
         }),
     };
     let (project, team) = (ws.project.clone(), ws.team.clone());
     let levels = filters::list_levels(ws);
     let level_defaults = level_default_types(ws, &levels);
     let data = row_data(ws, &hierarchy, &rows, &level_defaults);
-    let roots_shown = rows.iter().filter(|r| r.depth == 0).count();
+    let roots_shown = rows.iter().filter(|r| r.depth == 0 && !r.orphan).count();
+    let orphans_shown = rows.iter().filter(|r| r.depth == 0 && r.orphan).count();
     let roots_hidden = view
         .list
         .is_filtering()
@@ -150,6 +156,8 @@ pub fn EpicList(search_focus: Signal<Option<std::rc::Rc<MountedData>>>) -> Eleme
         out
     };
     let empty = visible.is_empty();
+    // The "Without a parent" group header goes before its first shown row.
+    let first_orphan = visible.iter().find(|d| d.row.orphan).map(|d| d.row.id);
     // Clicking a sortable header sorts by it; clicking it again goes back to backlog order.
     let on_sort = move |by: ListSort| {
         let next = if sort == by { ListSort::Backlog } else { by };
@@ -228,19 +236,27 @@ pub fn EpicList(search_focus: Signal<Option<std::rc::Rc<MountedData>>>) -> Eleme
                 span { role: "columnheader", class: "sr-only", "Assigned to" }
             }
             for (i, d) in visible.into_iter().enumerate() {
+                Fragment { key: "{d.row.id}",
+                if Some(d.row.id) == first_orphan {
+                    div { class: "lgroup", role: "row",
+                        span { role: "rowheader", "Without a parent" }
+                        span { class: "count", "{orphans_shown}" }
+                    }
+                }
                 ListRowView {
-                    key: "{d.row.id}",
                     index: i,
                     open: open.read().contains(&d.row.id),
                     on_toggle: move |id: CardId| {
                         let mut o = open.write();
                         if !o.remove(&id) { o.insert(id); }
                     },
-                    can_drag: sort == ListSort::Backlog,
+                    // A top item without a parent has no siblings to reorder among.
+                    can_drag: sort == ListSort::Backlog && !(d.row.orphan && d.row.depth == 0),
                     tint: style.tint,
                     accent: style.accent.class(),
                     icon: style.icon,
                     d,
+                }
                 }
             }
             if empty {
@@ -485,7 +501,7 @@ fn row_data(
             let card = ws.cards.get(&r.id)?;
             let add_types: Vec<String> = if r.task || r.context {
                 Vec::new()
-            } else if r.depth == 0 {
+            } else if r.depth == 0 && !r.orphan {
                 // Roots may own any level below them (stories can hang directly off an epic).
                 level_defaults
                     .get(1..task_level.max(1))
