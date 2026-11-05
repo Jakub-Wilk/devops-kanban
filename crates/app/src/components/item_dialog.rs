@@ -16,7 +16,7 @@ use crate::components::item_fields::{
 };
 use crate::components::widgets::{Icon, short_date};
 use crate::services::{self, ItemDetails, SaveOutcome, toast};
-use crate::state::{AppState, Conflict, DialogState, ToastKind, use_app};
+use crate::state::{AppState, Conflict, DialogState, NewInColumn, ToastKind, use_app};
 
 const PRIORITIES: [&str; 4] = ["Critical", "High", "Medium", "Low"];
 const EDITOR_ID: &str = "item-description";
@@ -69,7 +69,24 @@ pub fn open_new(
         desc_dirty: false,
         conflict: None,
         create_another: false,
+        column: None,
     }));
+}
+
+/// "New" under a kanban column: like [`open_new`], with the column's state preset.
+pub fn open_new_in_column(
+    mut st: AppState,
+    work_item_type: String,
+    parent: Option<CardId>,
+    area: String,
+    column: NewInColumn,
+) {
+    open_new(st, false, work_item_type, parent, area);
+    if let Some(d) = st.dialog.write().as_mut() {
+        d.form.state.clone_from(&column.state);
+        d.original.state.clone_from(&column.state);
+        d.column = Some(column);
+    }
 }
 
 pub fn open_edit(mut st: AppState, card: &Card, is_root: bool) {
@@ -88,6 +105,7 @@ pub fn open_edit(mut st: AppState, card: &Card, is_root: bool) {
         desc_dirty: false,
         conflict: None,
         create_another: false,
+        column: None,
     }));
     load_details(st, card.id);
 }
@@ -362,10 +380,18 @@ fn DialogBody() -> Element {
     let sprint = ws.current_iteration().cloned();
 
     let offered = offered_states(ws, &st.settings.read(), &ty);
-    let state_column = offered
-        .iter()
-        .find(|(s, _)| *s == form.state)
-        .and_then(|(_, c)| c.clone());
+    // The column it was opened from, while its state is kept; else the first that maps it.
+    let state_column = d
+        .column
+        .as_ref()
+        .filter(|c| c.state == form.state)
+        .map(|c| c.name.clone())
+        .or_else(|| {
+            offered
+                .iter()
+                .find(|(s, _)| *s == form.state)
+                .and_then(|(_, c)| c.clone())
+        });
     let default_state = offered.first().map(|(s, _)| s.clone()).unwrap_or_default();
     let changes = changes_of(&d);
     let change_rows: Vec<(ItemField, String, String)> = changes
@@ -494,7 +520,9 @@ fn DialogBody() -> Element {
             }
             match d.editing {
                 None => {
-                    let created = services::create_item(st, &form).await.is_some();
+                    let created = services::create_item(st, &form, d.column.as_ref())
+                        .await
+                        .is_some();
                     saving.set(false);
                     if created && d.create_another {
                         if let Some(dd) = st.dialog.write().as_mut() {

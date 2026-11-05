@@ -135,7 +135,7 @@ Content-Type: application/json
 POST {p}/_apis/wit/workitemsbatch?api-version=7.1
 { "ids": [1, 2, …≤200], "fields": ["System.Id", "System.Rev", "System.WorkItemType", "System.Title",
   "System.State", "System.BoardColumn", "System.BoardColumnDone", "System.BoardLane",
-  "System.AssignedTo", "System.Tags", "System.Parent", "Microsoft.VSTS.Common.StackRank", "…card fields"],
+  "System.AssignedTo", "System.Tags", "System.Description", "System.Parent", "Microsoft.VSTS.Common.StackRank", "…card fields"],
   "errorPolicy": "omit" }
 ```
 
@@ -166,7 +166,8 @@ Content-Type: application/json-patch+json
 ## Editing an item (the dialog)
 
 The edit dialog loads the full item first (`GET …/workitems/{id}?$expand=relations` returns every
-field): `System.Description` (HTML, not fetched with the cards because it can be large),
+field): `System.Description` (HTML; the cards fetch it too, for their first line and details, but the
+dialog wants the latest revision),
 `System.ChangedBy`/`ChangedDate` and `System.CreatedBy`/`CreatedDate` for the header.
 
 - The PATCH carries only the fields the user changed, against the revision the dialog loaded
@@ -183,6 +184,9 @@ field): `System.Description` (HTML, not fetched with the cards because it can be
   (`Board::visible_states`), so a state can't land a card in a column the user can't see. A card
   already in such a state keeps it listed. Tasks and top-level items have no kanban and get every
   state of their type.
+- A column's "New" button on the kanban presets the column's state. If the user keeps it, the
+  create also writes the board's own `WEF_…_Kanban.Column` (never `System.BoardColumn`), so the card
+  lands in that column even when another column maps the same state.
 - Creating can set `System.State` directly. A process rule may refuse a non-initial state; the error
   is shown as is.
 

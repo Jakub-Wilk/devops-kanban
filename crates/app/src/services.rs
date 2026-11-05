@@ -16,7 +16,7 @@ use kanban_core::{
 use serde_json::Value;
 use time::OffsetDateTime;
 
-use crate::state::{AppState, ItemMeta, MoveBack, Status, Toast, ToastKind};
+use crate::state::{AppState, ItemMeta, MoveBack, NewInColumn, Status, Toast, ToastKind};
 
 const TOAST_SECS: u64 = 6;
 
@@ -664,14 +664,24 @@ pub enum SaveOutcome {
     Failed,
 }
 
-/// Creates the dialog's item with its parent link. Returns the new id.
-pub async fn create_item(mut st: AppState, draft: &ItemDraft) -> Option<CardId> {
+/// Creates the dialog's item with its parent link, in `column` when given and its state was
+/// kept. Returns the new id.
+pub async fn create_item(
+    mut st: AppState,
+    draft: &ItemDraft,
+    column: Option<&NewInColumn>,
+) -> Option<CardId> {
     let client = st.client.peek().clone()?;
     let project = st.workspace.peek().as_ref().map(|w| w.project.clone())?;
     let mut doc = draft
         .patch_fields(None)
         .into_iter()
         .fold(PatchDocument::create(), |d, (f, v)| d.field(&f, v));
+    // The board's own column field (never System.BoardColumn), only while it agrees with the
+    // state; otherwise ADO places the card by its state.
+    if let Some(c) = column.filter(|c| c.state == draft.state && !c.field.is_empty()) {
+        doc = doc.field(&c.field, Value::String(c.name.clone()));
+    }
     if let Some(p) = draft.parent {
         doc = doc.parent(&client.work_item_url(p));
         // Tasks land in their parent's sprint, as on ADO's own board.

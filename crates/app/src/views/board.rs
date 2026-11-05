@@ -217,7 +217,9 @@ pub fn Board(project: String, team: String, board: String) -> Element {
                 if !has_ws {
                     if status == Status::Loading { Skeleton {} }
                 } else {
-                    main { key: "{current.key()}", class: "wrap panel",
+                    // The kanban fills the window and scrolls inside its board (both ways), so
+                    // things in a column can stick while the toolbar stays put.
+                    main { key: "{current.key()}", class: if current == Tab::Kanban { "wrap panel fill" } else { "wrap panel" },
                         match current {
                             Tab::List => rsx! { EpicList { search_focus } },
                             Tab::Kanban => rsx! { Kanban { board: board.clone() } },

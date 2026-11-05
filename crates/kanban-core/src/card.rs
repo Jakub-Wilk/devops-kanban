@@ -32,7 +32,7 @@ pub mod fields {
     pub const PRIORITY: &str = "Microsoft.VSTS.Common.Priority";
     pub const TARGET_DATE: &str = "Microsoft.VSTS.Scheduling.TargetDate";
     pub const COMPLETED_WORK: &str = "Microsoft.VSTS.Scheduling.CompletedWork";
-    /// HTML. Not fetched with the cards; the edit dialog reads it with the full item.
+    /// HTML; fetched with the cards (their first line and expanded details show it).
     pub const DESCRIPTION: &str = "System.Description";
     pub const CHANGED_BY: &str = "System.ChangedBy";
     pub const CREATED_BY: &str = "System.CreatedBy";
@@ -101,6 +101,10 @@ pub struct Card {
     pub iteration_path: String,
     /// Hours, kept in sync by 7pace.
     pub completed_work: Option<f64>,
+    /// `System.Description`, raw HTML as ADO stores it. Sanitise before rendering
+    /// ([`crate::description`]). Empty in caches written before it was fetched.
+    #[serde(default)]
+    pub description: String,
     pub changed_date: Option<OffsetDateTime>,
     /// Remaining card-setting fields, raw.
     pub extra: BTreeMap<String, Value>,
@@ -129,6 +133,7 @@ impl Card {
             fields::PRIORITY,
             fields::TARGET_DATE,
             fields::COMPLETED_WORK,
+            fields::DESCRIPTION,
         ];
         Self {
             id: dto.id,
@@ -170,6 +175,7 @@ impl Card {
             area_path: str_of(fields::AREA_PATH).unwrap_or_default(),
             iteration_path: str_of(fields::ITERATION_PATH).unwrap_or_default(),
             completed_work: f.get(fields::COMPLETED_WORK).and_then(Value::as_f64),
+            description: str_of(fields::DESCRIPTION).unwrap_or_default(),
             changed_date: str_of(fields::CHANGED_DATE)
                 .and_then(|s| OffsetDateTime::parse(&s, &Rfc3339).ok()),
             extra: f
@@ -230,6 +236,7 @@ pub fn fields_to_fetch(order_field: &str, card_fields: &[String]) -> Vec<String>
         fields::PRIORITY,
         fields::TARGET_DATE,
         fields::COMPLETED_WORK,
+        fields::DESCRIPTION,
     ]
     .iter()
     .map(|s| (*s).to_owned())

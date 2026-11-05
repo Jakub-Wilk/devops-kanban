@@ -2,10 +2,13 @@
 //! and state mappings from ADO), with a Features/Stories switcher, a Columns menu to hide
 //! columns, epic, assignee and area filters (all saved per board), and drag-and-drop
 //! between and within columns ("Move back" on the toast afterwards). Column headers show how many
-//! cards the filters hide and, when one person's cards are shown, a WIP meter of those cards.
+//! cards the filters hide and, when one person's cards are shown, a WIP meter of those cards;
+//! under them a "New" button per column opens the item dialog with that column's state. Both
+//! rows stick to the top while the board scrolls.
 //! The done column is a drop zone that closes items, with "View closed" for recent ones.
-//! Cards show the timer and add-time actions in their header and the time total in their footer;
-//! a chevron opens their tasks and the user's 7pace entries (only open cards load entries).
+//! Cards show the timer and add-time actions in their header, the description's first line, the
+//! first few tags and the time total; a chevron opens the full description and all tags, their
+//! tasks and the user's 7pace entries (only open cards load entries).
 
 use std::collections::HashSet;
 
@@ -18,13 +21,16 @@ use crate::components::filters::{
     FilterMenu, FilterOption, area_options, assignee_options, view_prefs,
 };
 use crate::components::icons;
-use crate::components::item_dialog::{open_edit, open_new};
+use crate::components::item_dialog::{open_edit, open_new_in_column};
 use crate::components::tasks::{CardTasks, TaskItem, task_items};
 use crate::components::time::{CardTimeActions, CardTimeLog, CardTimeTotal, EntryLoader};
 use crate::components::widgets::{Assignee, DateLabel, Icon, Prio, StatePill};
 use crate::routes::Route;
 use crate::services;
-use crate::state::{AppState, Drag, DropSlot, use_app};
+use crate::state::{AppState, Drag, DropSlot, NewInColumn, use_app};
+
+/// Tags a collapsed card shows before "+N".
+const COLLAPSED_TAGS: usize = 3;
 
 #[component]
 pub fn Kanban(board: String) -> Element {
@@ -162,6 +168,21 @@ pub fn Kanban(board: String) -> Element {
     // they are one person's: filtered to one person, or every shown card is the same assignee's.
     let wip_on = filters::filtered_to_one_person(&prefs)
         || filters::single_assignee(visible.iter().filter_map(|id| ws.cards.get(id))).is_some();
+    // "New" per column: the column's state for the board's default type, preset in the dialog.
+    // None for the done column (dropping there closes) and columns that don't map the type.
+    let new_in: Vec<Option<NewInColumn>> = columns
+        .iter()
+        .map(|c| {
+            (c.kind != kanban_core::ColumnKind::Outgoing)
+                .then(|| c.state_mappings.get(&default_type))
+                .flatten()
+                .map(|state| NewInColumn {
+                    field: b.fields.column.clone(),
+                    name: c.name.clone(),
+                    state: state.clone(),
+                })
+        })
+        .collect();
     let col_shown: std::collections::HashMap<String, usize> = header_cols
         .iter()
         .map(|h| (h.id.clone(), h.shown))
@@ -259,16 +280,6 @@ pub fn Kanban(board: String) -> Element {
                     }
                 },
             }
-            button {
-                class: "primary",
-                r#type: "button",
-                onclick: {
-                    let t = default_type.clone();
-                    move |_| open_new(st, false, t.clone(), epic_sel, area.clone())
-                },
-                Icon { svg: icons::PLUS }
-                "New {default_type.to_lowercase()}"
-            }
         }
 
         EntryLoader { ids: shown_ids }
@@ -276,7 +287,7 @@ pub fn Kanban(board: String) -> Element {
             div { class: "note", Icon { svg: icons::INFO } "All columns are hidden. Use the Columns menu to show some." }
         } else {
             div { class: "board-scroll",
-                div { class: "board", style: "{grid_style}",
+                div { class: "board heads", style: "{grid_style}",
                     for (i, h) in header_cols.iter().enumerate() {
                         div { key: "h-{h.id}", class: "colhead", style: "--i: {i}",
                             StatePill { state: h.name.clone(), category: h.category, color: h.color.clone() }
@@ -291,6 +302,29 @@ pub fn Kanban(board: String) -> Element {
                                     "{h.shown}/{h.limit} WIP"
                                 }
                             }
+                        }
+                    }
+                    // Second header row: a "New" button per column.
+                    for (h, preset) in header_cols.iter().zip(new_in) {
+                        match preset {
+                            Some(c) => {
+                                let t = default_type.clone();
+                                let area = area.clone();
+                                let tip = format!("New {} in {}", default_type.to_lowercase(), h.name);
+                                rsx! {
+                                    button {
+                                        key: "n-{h.id}",
+                                        class: "col-add",
+                                        r#type: "button",
+                                        "data-tip": "{tip}",
+                                        aria_label: "{tip}",
+                                        onclick: move |_| open_new_in_column(st, t.clone(), epic_sel, area.clone(), c.clone()),
+                                        Icon { svg: icons::PLUS_14 }
+                                        "New"
+                                    }
+                                }
+                            }
+                            None => rsx! { span { key: "n-{h.id}" } },
                         }
                     }
                 }
@@ -538,28 +572,30 @@ fn ColumnCell(
             },
             if closing {
                 div { class: "{zone_class}",
-                    Icon { svg: icons::CHECK }
-                    strong { if here.is_some() && incoming { "Release to close" } else { "Drop here to close" } }
-                    span { "data-tip": "Closed items stay listed on the List and Timeline", "{total} closed in the last {window} days" }
-                    if !closed_cards.is_empty() {
-                        button {
-                            class: "link sm",
-                            r#type: "button",
-                            aria_expanded: "{show_closed()}",
-                            onclick: move |_| show_closed.toggle(),
-                            if show_closed() { "Hide closed" } else { "View closed" }
+                    div { class: "close-zone-inner",
+                        Icon { svg: icons::CHECK }
+                        strong { if here.is_some() && incoming { "Release to close" } else { "Drop here to close" } }
+                        span { "data-tip": "Closed items stay listed on the List and Timeline", "{total} closed in the last {window} days" }
+                        if !closed_cards.is_empty() {
+                            button {
+                                class: "link sm",
+                                r#type: "button",
+                                aria_expanded: "{show_closed()}",
+                                onclick: move |_| show_closed.toggle(),
+                                if show_closed() { "Hide closed" } else { "View closed" }
+                            }
                         }
-                    }
-                    if show_closed() {
-                        ul { class: "closed-list",
-                            for (cid, c) in closed_cards.clone() {
-                                li { key: "{cid}",
-                                    button {
-                                        class: "task-title",
-                                        r#type: "button",
-                                        onclick: move |_| open_edit(st, &c, false),
-                                        span { class: "id", "{cid}" }
-                                        " {c.title}"
+                        if show_closed() {
+                            ul { class: "closed-list",
+                                for (cid, c) in closed_cards.clone() {
+                                    li { key: "{cid}",
+                                        button {
+                                            class: "task-title",
+                                            r#type: "button",
+                                            onclick: move |_| open_edit(st, &c, false),
+                                            span { class: "id", "{cid}" }
+                                            " {c.title}"
+                                        }
                                     }
                                 }
                             }
@@ -591,15 +627,18 @@ fn ColumnCell(
             if empty && before.is_none() && !closing {
                 p { class: "empty", "Nothing here" }
             }
-            div {
-                class: "col-tail",
-                ondragover: move |e| {
-                    if dragging.is_none() { return; }
-                    e.prevent_default();
-                    e.stop_propagation();
-                    let s = Some(DropSlot { column_id: col_for_tail.clone(), lane_id: lane_for_tail.clone(), before: None });
-                    if *st.drop_slot.peek() != s { st.drop_slot.set(s); }
-                },
+            // The close zone already fills the done column.
+            if !closing {
+                div {
+                    class: "col-tail",
+                    ondragover: move |e| {
+                        if dragging.is_none() { return; }
+                        e.prevent_default();
+                        e.stop_propagation();
+                        let s = Some(DropSlot { column_id: col_for_tail.clone(), lane_id: lane_for_tail.clone(), before: None });
+                        if *st.drop_slot.peek() != s { st.drop_slot.set(s); }
+                    },
+                }
             }
         }
     }
@@ -662,11 +701,24 @@ fn CardView(
     let edit = card.clone();
     let parent = card.clone();
     let (task_list, add_task) = tasks;
-    let tags: Vec<String> = card.tags.iter().take(3).cloned().collect();
     let expanded = st.card_open.read().contains(&id);
+    // Collapsed: the first few tags and the description's first line; expanded: all of both.
+    let tags: Vec<String> = if expanded {
+        card.tags.clone()
+    } else {
+        card.tags.iter().take(COLLAPSED_TAGS).cloned().collect()
+    };
+    let more_tags = card.tags.len() - tags.len();
+    let more_tip = card.tags[tags.len()..].join(", ");
+    let desc_line = kanban_core::description::first_line(&card.description);
+    let desc_html = (expanded && desc_line.is_some())
+        .then(|| kanban_core::description::sanitize_for_display(&card.description));
     let tasks_done = task_list.iter().filter(|t| t.category.is_done()).count();
-    let has_details =
-        !task_list.is_empty() || add_task.is_some() || crate::time_tracking::connected(st);
+    let has_details = !task_list.is_empty()
+        || add_task.is_some()
+        || crate::time_tracking::connected(st)
+        || desc_line.is_some()
+        || more_tags > 0;
     // The epic line uses the epic's type colour.
     let epic_color = epic.as_ref().and_then(|(eid, _)| {
         st.workspace
@@ -711,8 +763,8 @@ fn CardView(
                         r#type: "button",
                         draggable: "false",
                         aria_expanded: "{expanded}",
-                        aria_label: if expanded { "Hide tasks and time log" } else { "Show tasks and time log" },
-                        "data-tip": if expanded { "Hide tasks and time log" } else { "Show tasks and time log" },
+                        aria_label: if expanded { "Hide details" } else { "Show details" },
+                        "data-tip": if expanded { "Hide details" } else { "Show details" },
                         onclick: move |e| {
                             e.stop_propagation();
                             let mut open = st.card_open.write();
@@ -736,9 +788,17 @@ fn CardView(
                     span { "{title}" }
                 }
             }
+            if let Some(html) = desc_html {
+                div { class: "card-desc", draggable: "false", dangerous_inner_html: "{html}" }
+            } else if let Some(line) = desc_line {
+                p { class: "desc-line", "{line}" }
+            }
             if !tags.is_empty() {
-                div { class: "tags",
+                div { class: if expanded { "tags" } else { "tags one-row" },
                     for t in tags { span { key: "{t}", class: "tag", "{t}" } }
+                    if more_tags > 0 {
+                        span { class: "tag more", "data-tip": "{more_tip}", "+{more_tags}" }
+                    }
                 }
             }
             div { class: "bottom",

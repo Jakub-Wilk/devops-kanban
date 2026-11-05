@@ -105,6 +105,20 @@ pub struct DialogState {
     pub conflict: Option<Conflict>,
     /// New: keep the dialog open for the next item after creating one.
     pub create_another: bool,
+    /// New, from a kanban column's "New" button: the column to create the item in.
+    pub column: Option<NewInColumn>,
+}
+
+/// A kanban column a new item starts in. Its state is preset in the dialog; if the user keeps
+/// it, the board's own column field is written too, so the card lands in this column even when
+/// another column maps the same state.
+#[derive(Debug, Clone, PartialEq)]
+pub struct NewInColumn {
+    /// The board's `WEF_…_Kanban.Column` field.
+    pub field: String,
+    pub name: String,
+    /// The state the column maps for the item's type.
+    pub state: String,
 }
 
 /// Who touched the item, for the edit dialog's header.

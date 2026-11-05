@@ -278,11 +278,20 @@ main.panel { padding-top: var(--s5); padding-bottom: 48px; display: flex; flex-d
 }
 
 /* ---------- kanban ---------- */
+/* Kanban page: fills the window; the board scrolls both ways inside it. */
+main.panel.fill { height: 100%; min-height: 0; padding-bottom: var(--s3); }
+main.panel.fill .board-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; --heads-h: 84px; }
+/* The column headers (state pill, count, WIP) stay at the top of the scrolling board. */
+/* Two rows: the column headers, then a "New" button per column. */
+.board.heads { position: sticky; top: 0; z-index: 6; min-height: var(--heads-h, 84px); align-items: center; row-gap: var(--s2); padding-bottom: var(--s2); background: var(--bg); box-shadow: 0 8px 8px -8px rgba(0, 0, 0, .5); }
 .board-scroll { overflow-x: auto; padding-bottom: var(--s3); margin: 0 -4px; padding-left: var(--s1); padding-right: var(--s1); }
-.board { display: grid; gap: var(--s3); align-items: start; }
+/* Columns in a lane share the tallest one's height; .col-tail fills the rest as drop space. */
+.board { display: grid; gap: var(--s3); align-items: stretch; }
 .col { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-lg); padding: var(--s3); display: flex; flex-direction: column; gap: var(--s3); min-height: 140px; transition: border-color .2s, background .2s, box-shadow .2s; animation: fadeUp .35s var(--ease) both; animation-delay: calc(var(--i, 0) * 40ms); }
 .col.over { border-color: var(--accent); background: #121A2B; box-shadow: 0 0 0 3px rgba(120, 166, 255, .12); }
 .col.over-limit { border-color: var(--warn); }
+.col-add { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 30px; padding: 0 var(--s3); border: 1px dashed var(--line-strong); border-radius: var(--r-md); background: none; color: var(--faint); font-size: 13px; font-weight: 500; transition: background .15s, color .15s, border-color .15s; }
+.col-add:hover { background: var(--hover); border-color: #3E4757; color: var(--text); }
 .colhead { display: flex; align-items: center; gap: var(--s2); padding: 2px var(--s1) var(--s1); }
 .wip { margin-left: auto; font-family: var(--mono); font-size: var(--meta); color: var(--faint); }
 .wip.over { color: var(--warn); font-weight: 600; }
@@ -308,6 +317,22 @@ main.panel { padding-top: var(--s5); padding-bottom: 48px; display: flex; flex-d
 .card .etitle { min-height: 0; padding: 2px 0; width: 100%; }
 .card .bottom { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); min-height: 28px; }
 .card .tags { display: flex; flex-wrap: wrap; gap: var(--s1); }
+.card .tags.one-row { flex-wrap: nowrap; overflow: hidden; }
+.card .tags.one-row .tag { flex: none; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card .tag.more { color: var(--faint); border-style: dashed; }
+/* Description: the first line while collapsed, all of it when expanded. */
+.card .desc-line { margin: 0; font-size: var(--meta); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card .card-desc { font-size: var(--meta); line-height: 1.5; color: var(--text-2); overflow-wrap: anywhere; user-select: text; cursor: auto; }
+.card .card-desc > :first-child { margin-top: 0; }
+.card .card-desc > :last-child { margin-bottom: 0; }
+.card .card-desc p, .card .card-desc div { margin: 0 0 6px; }
+.card .card-desc ul, .card .card-desc ol { margin: 0 0 6px; padding-left: 18px; }
+.card .card-desc h1, .card .card-desc h2, .card .card-desc h3, .card .card-desc h4 { margin: 8px 0 4px; font-size: var(--meta); color: var(--text); }
+.card .card-desc a { color: var(--accent); }
+.card .card-desc img { max-width: 100%; height: auto; }
+.card .card-desc code { font-family: var(--mono); font-size: 12px; background: var(--chip); padding: 0 4px; border-radius: 4px; }
+.card .card-desc table { border-collapse: collapse; max-width: 100%; }
+.card .card-desc td, .card .card-desc th { border: 1px solid var(--line-strong); padding: 2px 6px; }
 .tasks { display: flex; flex-direction: column; gap: 2px; margin-top: 2px; padding-top: var(--s2); border-top: 1px dashed var(--card-line); }
 .task-row { display: flex; align-items: center; gap: var(--s2); min-height: 26px; padding: 0 2px 0 var(--s2); border-radius: var(--r-sm); box-shadow: inset 2px 0 0 var(--tc, transparent); transition: background .15s, opacity .2s; }
 .task-row:hover { background: rgba(255, 255, 255, .04); }
@@ -360,7 +385,9 @@ main.panel { padding-top: var(--s5); padding-bottom: 48px; display: flex; flex-d
 .slot { height: 0; border-radius: var(--r-md); border: 2px dashed rgba(120, 166, 255, .55); background: rgba(120, 166, 255, .06); animation: slotOpen .22s var(--ease) forwards; }
 .col-tail { flex: 1 1 auto; min-height: 36px; border-radius: var(--r-md); }
 .col .empty { padding: var(--s4) var(--s2); font-size: 13px; }
-.close-zone { flex: 1 1 auto; min-height: 160px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--s2); padding: var(--s4); border-radius: var(--r-md); border: 2px dashed var(--line-strong); color: var(--faint); text-align: center; font-size: 12px; transition: border-color .15s, background .15s, color .15s; }
+/* The zone fills the column; its content stays at the top and sticks while the board scrolls. */
+.close-zone { flex: 1 1 auto; min-height: 160px; padding: var(--s4); border-radius: var(--r-md); border: 2px dashed var(--line-strong); color: var(--faint); text-align: center; font-size: 12px; transition: border-color .15s, background .15s, color .15s; }
+.close-zone-inner { position: sticky; top: calc(var(--heads-h, 0px) + var(--s4)); display: flex; flex-direction: column; align-items: center; gap: var(--s2); }
 .close-zone strong { color: var(--text-2); font-size: 14px; font-weight: 600; }
 .close-zone .ico { color: var(--faint); transition: transform .2s var(--spring), color .15s; }
 .close-zone.over { border-color: #339933; background: rgba(51, 153, 51, .12); color: #A6E6BE; }
