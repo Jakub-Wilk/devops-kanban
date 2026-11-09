@@ -24,7 +24,7 @@
 │ move_plan.rs  drop → field patches + reorder   sync.rs  SyncEngine (delta polling)    │
 │ time.rs   TimeEntry, 7pace read/write paths    cache.rs  last board snapshot on disk  │
 │ config.rs Settings + keyring                   filters.rs  tab filters                │
-│ states.rs state categories + ADO state colors                                         │
+│ states.rs state categories + ADO state colors  timetable.rs week, overlaps, drag rules│
 └───────────────────┬───────────────────────────────────────────────┬───────────────────┘
                     │ DTOs                                          │ DTOs
 ┌───────────────── crates/ado-client ──────▼──────────┐ ┌──── crates/sevenpace-client ──▼───┐

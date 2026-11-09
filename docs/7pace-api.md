@@ -176,7 +176,8 @@ Show 7pace's error message verbatim.
 
 ## How the app uses it
 
-Kanban only (`crates/app/src/time_tracking.rs`, `components/time.rs`):
+The kanban, the top-bar timer chip and the Timetable tab (`crates/app/src/time_tracking.rs`,
+`components/time.rs`, `components/timetable.rs`):
 - **Startup / Settings:** `GET rest/me` validates the token, then `GET rest/activityTypes` and the
   timer's `current`.
 - **Entries:** the user's own `GET rest/workLogs?$workItemIds=…&$includeEditable=true` for all the
@@ -186,6 +187,16 @@ Kanban only (`crates/app/src/time_tracking.rs`, `components/time.rs`):
 - **Timer:** `current` on Kanban open, window focus, after start/stop, and every 5 minutes.
 - **Writes:** `POST`/`PATCH`/`DELETE rest/workLogs`, `startTracking`, `stopTracking/0`. After each,
   the card's entries are refetched and the ADO card is refetched ~6 s later for `CompletedWork`.
+- **Timetable (the week):** `GET rest/workLogs?$fromTimestamp=…&$toTimestamp=…&$includeEditable=true`
+  for the week shown, paged like above, once when a week is first shown, again after any write
+  and on Reload; never on a timer. How 7pace reads the bounds (local or UTC) isn't documented, so
+  the app asks for a day more on each side (`Mon-1 00:00` to `Mon+8 00:00`, naive local) and keeps
+  the entries whose local time touches the week. Titles of items outside the workspace come from
+  ADO (`workitemsbatch` at organization scope), not from 7pace.
+- **Timetable drags:** a move or resize is one `PATCH rest/workLogs/{id}` with only `timeStamp`,
+  `length` and `workItemId` (comment and activity are left out, so they stay). The new time is
+  shown at once and put back if 7pace refuses. Drags never create an overlap
+  (`kanban_core::timetable`); existing overlaps are shown in red for the user to fix.
 - **Stop:** opens the time dialog with the timer's time; the timer keeps running until the user
   confirms. Confirming calls `stopTracking/0`, which saves the track as a worklog by itself, so the
   app never creates a second one: it reads the card's worklogs (up to 4 times, 1.5 s apart, as the
@@ -197,6 +208,9 @@ Kanban only (`crates/app/src/time_tracking.rs`, `components/time.rs`):
 
 The shapes above come from the published v3.2 OpenAPI spec; the client's tests use hand-written
 JSON in those shapes. Test these with a real token:
+
+- Whether `$fromTimestamp`/`$toTimestamp` are read as local or UTC (the Timetable pads a day on
+  each side, so either works).
 
 - How REST interprets `timeStamp` with or without a UTC offset (the spec says "local time"; the
   OData samples use `Z`).

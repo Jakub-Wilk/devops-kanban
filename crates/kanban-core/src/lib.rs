@@ -2,7 +2,7 @@
 //!
 //! Owns everything that is "kanban logic" rather than HTTP or rendering: building a [`Board`]
 //! from ADO board config + work items, deciding which fields a move must patch, the epic
-//! hierarchy, the item dialog's draft (diff, conflict rebase), view filters, timeline layout, WIQL scoping, background delta sync, time tracking, the on-disk
+//! hierarchy, the item dialog's draft (diff, conflict rebase), view filters, timeline layout, the timetable week (overlaps, drag rules), WIQL scoping, background delta sync, time tracking, the on-disk
 //! caches (workspace, avatars) and user settings. No Dioxus dependency.
 
 pub mod avatars;
@@ -21,6 +21,7 @@ pub mod states;
 pub mod sync;
 pub mod time;
 pub mod timeline;
+pub mod timetable;
 pub mod workspace;
 
 pub use board::{Board, Column, ColumnKind, Lane};

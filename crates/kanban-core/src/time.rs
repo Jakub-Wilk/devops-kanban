@@ -10,7 +10,8 @@
 //!
 //! This module is the boundary: durations are seconds on the wire, and `timeStamp` is the start in
 //! the user's **local** time (no offset), which [`TimeEntry`] keeps as a `PrimitiveDateTime`.
-//! Also: free-text duration parsing for the time dialog and the running [`TimerState`].
+//! Also: free-text duration parsing for the time dialog, 24-hour time-of-day input (never
+//! AM/PM) and the running [`TimerState`].
 
 use sevenpace_client::models::{TrackingStateDto, WorkLogDto};
 use time::format_description::well_known::Rfc3339;
@@ -182,6 +183,49 @@ pub fn format_hmm(minutes: i64) -> String {
     }
 }
 
+/// A time-of-day field as typed: digits and at most one `:`, no more than 5 characters. Never
+/// AM/PM: every time in the app is 24-hour.
+pub fn clock_input(input: &str) -> String {
+    let mut colon = false;
+    input
+        .chars()
+        .filter(|c| {
+            if *c == ':' && !colon {
+                colon = true;
+                return true;
+            }
+            c.is_ascii_digit()
+        })
+        .take(5)
+        .collect()
+}
+
+/// A 24-hour time of day from what a person types: `9`, `09`, `930`, `0930`, `9:30`, `17`,
+/// `1730`, `17:30`. `None` for anything else, an hour over 23 or minutes over 59.
+pub fn parse_time_of_day(input: &str) -> Option<time::Time> {
+    let s = input.trim();
+    let (h, m) = match s.split_once(':') {
+        Some((h, m)) => (h, m),
+        None if !s.is_empty() && s.chars().all(|c| c.is_ascii_digit()) => match s.len() {
+            1 | 2 => (s, "0"),
+            3 => s.split_at(1),
+            4 => s.split_at(2),
+            _ => return None,
+        },
+        None => return None,
+    };
+    if h.is_empty() || h.len() > 2 || m.is_empty() || m.len() > 2 {
+        return None;
+    }
+    let (h, m): (u8, u8) = (h.parse().ok()?, m.parse().ok()?);
+    time::Time::from_hms(h, m, 0).ok()
+}
+
+/// `09:05`.
+pub fn format_time_of_day(t: time::Time) -> String {
+    format!("{:02}:{:02}", t.hour(), t.minute())
+}
+
 /// `0:42:10`, for a running timer.
 pub fn format_clock(secs: i64) -> String {
     let s = secs.max(0);
@@ -281,6 +325,35 @@ mod tests {
         assert_eq!(parse_hmm("24:01"), None);
         assert_eq!(format_hmm(65), "1:05");
         assert_eq!(format_hmm(0), "");
+    }
+
+    #[test]
+    fn time_of_day_is_24_hour() {
+        use time::macros::time;
+        for (input, t) in [
+            ("9", time!(09:00)),
+            ("09", time!(09:00)),
+            ("930", time!(09:30)),
+            ("0930", time!(09:30)),
+            ("9:30", time!(09:30)),
+            ("17", time!(17:00)),
+            ("1730", time!(17:30)),
+            ("17:30", time!(17:30)),
+            ("00:00", time!(00:00)),
+            ("23:59", time!(23:59)),
+            (" 8:05 ", time!(08:05)),
+        ] {
+            assert_eq!(parse_time_of_day(input), Some(t), "{input}");
+        }
+        for bad in [
+            "", "24:00", "25", "2400", "12:60", "5pm", "5 PM", "1:2:3", "12345", ":30", "9:",
+        ] {
+            assert_eq!(parse_time_of_day(bad), None, "{bad}");
+        }
+        assert_eq!(format_time_of_day(time!(09:05)), "09:05");
+        assert_eq!(clock_input("5:30 PM"), "5:30");
+        assert_eq!(clock_input("17::30"), "17:30");
+        assert_eq!(clock_input("123456"), "12345");
     }
 
     #[test]

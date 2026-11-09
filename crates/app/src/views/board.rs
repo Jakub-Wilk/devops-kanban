@@ -1,5 +1,6 @@
 //! One team's workspace: top bar (with the iteration filter), page head with the List / Kanban /
-//! Timeline tabs, and the active tab. `board` is the backlog level shown on the Kanban tab. Filters
+//! Timeline / Timetable tabs, and the active tab. The Timetable (the user's week in 7pace) shows
+//! only while time tracking is on. `board` is the backlog level shown on the Kanban tab. Filters
 //! (each tab its own, the iteration shared) live in the settings, so they survive tab switches
 //! and relaunches.
 
@@ -12,6 +13,7 @@ use crate::components::icons;
 use crate::components::kanban::Kanban;
 use crate::components::time::TimerChip;
 use crate::components::timeline::Timeline;
+use crate::components::timetable::Timetable;
 use crate::components::view_options::{ViewOptions, ViewTab};
 use crate::components::widgets::{Avatar, Icon};
 use crate::routes::Route;
@@ -23,6 +25,7 @@ enum Tab {
     List,
     Kanban,
     Timeline,
+    Timetable,
 }
 
 impl Tab {
@@ -30,6 +33,7 @@ impl Tab {
         match s {
             Some("kanban") => Self::Kanban,
             Some("timeline") => Self::Timeline,
+            Some("timetable") => Self::Timetable,
             _ => Self::List,
         }
     }
@@ -39,6 +43,7 @@ impl Tab {
             Self::List => "list",
             Self::Kanban => "kanban",
             Self::Timeline => "timeline",
+            Self::Timetable => "timetable",
         }
     }
 }
@@ -110,7 +115,19 @@ pub fn Board(project: String, team: String, board: String) -> Element {
             .ok()
     });
 
-    let current = tab();
+    let time_on = st.settings.read().time_tracking.enabled;
+    // Time tracking switched off while the Timetable was open: back to the List.
+    let current = match tab() {
+        Tab::Timetable if !time_on => Tab::List,
+        t => t,
+    };
+    let week_hours = {
+        let t = st.time.read();
+        t.week
+            .loaded
+            .then(|| t.week.entries.iter().map(|e| e.seconds).sum::<i64>() / 3600)
+            .map(|h| h as usize)
+    };
     let project_mark: String = project
         .chars()
         .find(|c| c.is_alphanumeric())
@@ -152,15 +169,19 @@ pub fn Board(project: String, team: String, board: String) -> Element {
                         TabButton { label: "List", icon: icons::LIST, on: current == Tab::List, count: counts.map(|c| c.0), onclick: move |_| set_tab(Tab::List) }
                         TabButton { label: "Kanban", icon: icons::KANBAN, on: current == Tab::Kanban, count: counts.map(|c| c.1), onclick: move |_| set_tab(Tab::Kanban) }
                         TabButton { label: "Timeline", icon: icons::TIMELINE, on: current == Tab::Timeline, count: counts.map(|c| c.2), onclick: move |_| set_tab(Tab::Timeline) }
+                        if time_on {
+                            TabButton { label: "Timetable", icon: icons::TIMETABLE, on: current == Tab::Timetable, count: week_hours, unit: "h", onclick: move |_| set_tab(Tab::Timetable) }
+                        }
                     }
                     // Right after the tabs, so it's in the same place on each; it shows the
-                    // current view's options (none for the timeline).
-                    ViewOptions {
-                        tab: match current {
-                            Tab::List => ViewTab::List,
-                            Tab::Kanban => ViewTab::Kanban,
-                            Tab::Timeline => ViewTab::Timeline,
-                        },
+                    // current view's options (none for the timetable).
+                    if let Some(view) = match current {
+                        Tab::List => Some(ViewTab::List),
+                        Tab::Kanban => Some(ViewTab::Kanban),
+                        Tab::Timeline => Some(ViewTab::Timeline),
+                        Tab::Timetable => None,
+                    } {
+                        ViewOptions { tab: view }
                     }
                     div { class: "spacer" }
                     TimerChip {}
@@ -237,11 +258,12 @@ pub fn Board(project: String, team: String, board: String) -> Element {
                 } else {
                     // The kanban fills the window and scrolls inside its board (both ways), so
                     // things in a column can stick while the toolbar stays put.
-                    main { key: "{current.key()}", class: if current == Tab::Kanban { "wrap panel fill" } else { "wrap panel" },
+                    main { key: "{current.key()}", class: if matches!(current, Tab::Kanban | Tab::Timetable) { "wrap panel fill" } else { "wrap panel" },
                         match current {
                             Tab::List => rsx! { EpicList { search_focus } },
                             Tab::Kanban => rsx! { Kanban { board: board.clone() } },
                             Tab::Timeline => rsx! { Timeline {} },
+                            Tab::Timetable => rsx! { Timetable {} },
                         }
                     }
                 }
@@ -256,6 +278,9 @@ fn TabButton(
     icon: &'static str,
     on: bool,
     count: Option<usize>,
+    /// After the count (`h` for the Timetable's hours).
+    #[props(default)]
+    unit: &'static str,
     onclick: EventHandler<MouseEvent>,
 ) -> Element {
     rsx! {
@@ -267,7 +292,7 @@ fn TabButton(
             onclick: move |e| onclick.call(e),
             Icon { svg: icon }
             "{label}"
-            if let Some(n) = count { span { class: "count", "{n}" } }
+            if let Some(n) = count { span { class: "count", "{n}{unit}" } }
         }
     }
 }

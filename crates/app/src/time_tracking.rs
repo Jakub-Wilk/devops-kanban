@@ -7,6 +7,10 @@
 //! because the 7pace web UI or desktop client can change it. After any write the card is
 //! refetched from ADO a few seconds later, once 7pace has synced the new total.
 //!
+//! The Timetable tab reads one week of the user's entries by date (`load_week`, one paged call),
+//! again after any write and on Reload, never on a timer. Drags there are applied at once and
+//! put back if 7pace refuses (`reschedule`).
+//!
 //! Stopping goes through the time dialog (`stop_and_log`): 7pace saves the track as a worklog
 //! itself, and the dialog's changes are then applied to that entry, so nothing is logged twice.
 //!
@@ -20,14 +24,15 @@ use dioxus::core::spawn_forever;
 use dioxus::prelude::*;
 use kanban_core::CardId;
 use kanban_core::time::{
-    Activity, TimeEntry, TimerState, format_duration, tz_minutes, wire_timestamp,
+    Activity, TimeEntry, TimerState, format_duration, parse_time_of_day, tz_minutes, wire_timestamp,
 };
+use kanban_core::timetable;
 use sevenpace_client::models::{StartTracking, WorkLogWrite};
 use sevenpace_client::{SevenPaceClient, SevenPaceConfig, SevenPaceError, SevenPaceToken};
-use time::{OffsetDateTime, PrimitiveDateTime, UtcOffset};
+use time::{Date, OffsetDateTime, PrimitiveDateTime, UtcOffset};
 
 use crate::services::{self, toast};
-use crate::state::{AppState, TimeDialogState, TimeTracking, ToastKind};
+use crate::state::{AppState, ItemRef, TimeDialogState, TimeTracking, ToastKind};
 
 /// How long 7pace takes to write `CompletedWork` back to ADO, roughly.
 const TOTAL_SYNC_DELAY: Duration = Duration::from_secs(6);
@@ -234,6 +239,175 @@ pub fn reload(mut st: AppState) {
     t.generation += 1;
     drop(t);
     refresh_timer(st);
+    reload_week(st);
+}
+
+/// Loads the user's entries for the week starting `monday` (Timetable). 7pace doesn't say whether
+/// `$fromTimestamp`/`$toTimestamp` are local or UTC, so this asks for a day more on each side and
+/// keeps the entries whose local time touches the week. Items outside the workspace get their
+/// titles from ADO afterwards.
+pub fn load_week(mut st: AppState, monday: Date) {
+    let Some(client) = st.sevenpace.peek().clone() else {
+        return;
+    };
+    {
+        let mut t = st.time.write();
+        if t.week.monday != Some(monday) {
+            t.week.monday = Some(monday);
+            t.week.loaded = false;
+            t.week.entries.clear();
+        }
+        t.week.loading = true;
+    }
+    spawn_forever(async move {
+        let from = (monday - time::Duration::days(1)).midnight();
+        let to = (monday + time::Duration::days(8)).midnight();
+        let result = client
+            .worklogs_between(&wire_timestamp(from), &wire_timestamp(to))
+            .await;
+        // Another week was asked for meanwhile: its own load fills the state.
+        if st.time.peek().week.monday != Some(monday) {
+            return;
+        }
+        match result {
+            Ok(dtos) => {
+                let local = local_offset();
+                let week_from = monday.midnight();
+                let week_to = (monday + time::Duration::days(7)).midnight();
+                let mut entries: Vec<TimeEntry> = dtos
+                    .iter()
+                    .filter_map(|d| TimeEntry::from_dto(d, local))
+                    .filter(|e| {
+                        e.start < week_to
+                            && (timetable::end_of(e) > week_from || e.start >= week_from)
+                    })
+                    .collect();
+                entries.sort_by(|a, b| (a.start, &a.id).cmp(&(b.start, &b.id)));
+                let missing: Vec<CardId> = {
+                    let ws = st.workspace.peek();
+                    let known = st.time.peek();
+                    let mut ids: Vec<CardId> = entries
+                        .iter()
+                        .filter_map(|e| e.work_item)
+                        .filter(|id| {
+                            !ws.as_ref().is_some_and(|w| w.cards.contains_key(id))
+                                && !known.week.items.contains_key(id)
+                        })
+                        .collect();
+                    ids.sort_unstable();
+                    ids.dedup();
+                    ids
+                };
+                {
+                    let mut t = st.time.write();
+                    t.week.entries = entries;
+                    t.week.loading = false;
+                    t.week.loaded = true;
+                }
+                load_item_refs(st, missing);
+            }
+            Err(e) => {
+                st.time.write().week.loading = false;
+                report(st, &e, "Couldn't load the week's time entries");
+            }
+        }
+    });
+}
+
+/// Loads the shown week again, if the Timetable has shown one.
+pub fn reload_week(st: AppState) {
+    // Read it out first: a guard in the `if let` would live through `load_week`'s write.
+    let monday = st.time.peek().week.monday;
+    if let Some(monday) = monday {
+        load_week(st, monday);
+    }
+}
+
+/// Titles and types of `ids` from ADO, across projects (≤200 per call). Best effort: the
+/// Timetable shows the bare id when this fails.
+fn load_item_refs(mut st: AppState, ids: Vec<CardId>) {
+    let Some(ado) = st.client.peek().clone() else {
+        return;
+    };
+    if ids.is_empty() {
+        return;
+    }
+    spawn_forever(async move {
+        let fields = [
+            kanban_core::card::fields::ID,
+            kanban_core::card::fields::TITLE,
+            kanban_core::card::fields::TYPE,
+        ]
+        .map(str::to_owned);
+        match ado.work_items_batch_org(&ids, &fields).await {
+            Ok(items) => {
+                let mut t = st.time.write();
+                for w in items {
+                    let text = |k: &str| {
+                        w.fields
+                            .get(k)
+                            .and_then(serde_json::Value::as_str)
+                            .unwrap_or_default()
+                            .to_owned()
+                    };
+                    t.week.items.insert(
+                        w.id,
+                        ItemRef {
+                            title: text(kanban_core::card::fields::TITLE),
+                            work_item_type: text(kanban_core::card::fields::TYPE),
+                        },
+                    );
+                }
+            }
+            Err(e) => tracing::warn!(error = %e, "couldn't read the titles of logged items"),
+        }
+    });
+}
+
+/// Moves or resizes `entry` to `start` and `seconds` (a Timetable drag, already kept clear of
+/// other entries). Shown at once; put back with the error if 7pace refuses, then refetched.
+/// Only time and length are sent, so the comment and activity stay as they are.
+pub fn reschedule(mut st: AppState, entry: TimeEntry, start: PrimitiveDateTime, seconds: i64) {
+    let Some(client) = st.sevenpace.peek().clone() else {
+        return;
+    };
+    if start == entry.start && seconds == entry.seconds {
+        return;
+    }
+    let mut set = move |e: &TimeEntry| {
+        let mut t = st.time.write();
+        if let Some(x) = t.week.entries.iter_mut().find(|x| x.id == e.id) {
+            *x = e.clone();
+        }
+        t.week
+            .entries
+            .sort_by(|a, b| (a.start, &a.id).cmp(&(b.start, &b.id)));
+    };
+    set(&TimeEntry {
+        start,
+        seconds,
+        ..entry.clone()
+    });
+    spawn_forever(async move {
+        let body = WorkLogWrite {
+            time_stamp: wire_timestamp(start),
+            length: seconds,
+            work_item_id: entry.work_item,
+            comment: None,
+            activity_type_id: None,
+        };
+        match client.update_worklog(&entry.id, &body).await {
+            Ok(_) => match entry.work_item {
+                Some(card) => after_write(st, card),
+                None => reload_week(st),
+            },
+            Err(e) => {
+                set(&entry);
+                report(st, &e, "Couldn't change the entry");
+                reload_week(st);
+            }
+        }
+    });
 }
 
 /// Reads the running timer from 7pace, which may have been started or stopped elsewhere (the
@@ -437,6 +611,9 @@ pub async fn stop_and_log(mut st: AppState, form: TimeDialogState) -> Result<(),
 
 /// The worklog body for the dialog's values.
 fn write_of(form: &TimeDialogState) -> Result<WorkLogWrite, String> {
+    if form.card == 0 {
+        return Err("Pick the work item to log the time on.".into());
+    }
     if form.minutes <= 0 {
         return Err("Enter how long you worked.".into());
     }
@@ -468,17 +645,16 @@ fn start_of(form: &TimeDialogState, seconds: i64) -> Result<PrimitiveDateTime, S
         let end = PrimitiveDateTime::new(form.date, now_local().time());
         return Ok(end - time::Duration::seconds(seconds));
     }
-    let start = time::Time::parse(
-        form.start.trim(),
-        time::macros::format_description!("[hour]:[minute]"),
-    )
-    .map_err(|_| "Enter the start time as HH:MM.".to_owned())?;
+    let start = parse_time_of_day(&form.start)
+        .ok_or_else(|| "Enter the start time as HH:MM, 24-hour (00:00 to 23:59).".to_owned())?;
     Ok(PrimitiveDateTime::new(form.date, start))
 }
 
-/// Reloads the card's entries now and its ADO total once 7pace has synced it.
+/// Reloads the card's entries and the Timetable's week now, and the card's ADO total once 7pace
+/// has synced it.
 fn after_write(st: AppState, card: CardId) {
     load_entries(st, vec![card], true);
+    reload_week(st);
     services::reload_card_later(st, card, TOTAL_SYNC_DELAY);
 }
 

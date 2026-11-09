@@ -44,6 +44,18 @@ icon!(
 );
 icon!(TIMELINE, "16", "2.6", "<path d=\"M4 6h8M8 12h12M6 18h9\"/>");
 icon!(
+    TIMETABLE,
+    "16",
+    "2",
+    "<rect x=\"3\" y=\"5\" width=\"18\" height=\"16\" rx=\"2\"/><path d=\"M3 10h18M9 10v11M15 10v11M8 3v4M16 3v4\"/>"
+);
+icon!(
+    ALERT_12,
+    "12",
+    "2.4",
+    "<path d=\"M12 3l10 18H2zM12 10v4M12 18h.01\"/>"
+);
+icon!(
     SEARCH,
     "16",
     "2",

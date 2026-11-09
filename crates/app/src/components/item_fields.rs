@@ -46,7 +46,8 @@ fn highlight(title: &str, q: &str) -> (String, String, String) {
 }
 
 /// The picked parent as a small card with "Change", or a search box listing the candidates
-/// (by title or id; ↑/↓, Enter, Esc).
+/// (by title or id; ↑/↓, Enter, Esc). Also the time dialog's work item picker, through the
+/// optional labels.
 #[component]
 pub fn ParentPicker(
     options: Vec<ParentOption>,
@@ -54,6 +55,18 @@ pub fn ParentPicker(
     /// Plural for the count and the empty text, e.g. "epics".
     noun: String,
     onpick: EventHandler<Option<CardId>>,
+    /// The field's accessible name.
+    #[props(default = "Parent".to_owned())]
+    label: String,
+    /// The group of options marked `recent`.
+    #[props(default = "Recently changed".to_owned())]
+    recent_label: String,
+    /// The listbox footer's note; default: closed items are hidden.
+    #[props(default)]
+    foot: Option<String>,
+    /// Focus the search box when it first shows.
+    #[props(default)]
+    autofocus: bool,
 ) -> Element {
     let mut query = use_signal(String::new);
     let mut open = use_signal(|| false);
@@ -66,7 +79,9 @@ pub fn ParentPicker(
                 span { class: "tdot", style: "--tc: #{p.type_color}" }
                 span { class: "id", "{p.id}" }
                 span { class: "t", b { "{p.title}" } small { "{p.context}" } }
-                StatePill { state: p.state.clone(), category: p.category, color: p.state_color.clone() }
+                if !p.state.is_empty() {
+                    StatePill { state: p.state.clone(), category: p.category, color: p.state_color.clone() }
+                }
                 button {
                     class: "ghostbtn",
                     r#type: "button",
@@ -90,7 +105,7 @@ pub fn ParentPicker(
         let recent: Vec<ParentOption> = options.iter().filter(|o| o.recent).cloned().collect();
         let rest: Vec<ParentOption> = options.iter().filter(|o| !o.recent).cloned().collect();
         [
-            ("Recently changed".to_owned(), recent),
+            (recent_label.clone(), recent),
             (format!("All {noun} · {}", rest.len()), rest),
         ]
         .into_iter()
@@ -128,6 +143,8 @@ pub fn ParentPicker(
     };
     let flat_keys = flat.clone();
     let mut index = 0usize;
+    let lb_id = format!("{}-lb", label.to_lowercase().replace(' ', "-"));
+    let foot = foot.unwrap_or_else(|| format!("Closed {noun} are hidden"));
     rsx! {
         div { class: "combo anchor",
             span { class: "ico-l", Icon { svg: icons::SEARCH } }
@@ -136,13 +153,13 @@ pub fn ParentPicker(
                 r#type: "text",
                 role: "combobox",
                 aria_expanded: "{open()}",
-                aria_controls: "parent-lb",
+                aria_controls: "{lb_id}",
                 aria_autocomplete: "list",
-                aria_label: "Parent",
+                aria_label: "{label}",
                 placeholder: "Search by ID or title",
                 value: "{query}",
                 onmounted: move |e| async move {
-                    if changing() {
+                    if changing() || autofocus {
                         let _ = e.set_focus(true).await;
                     }
                 },
@@ -174,7 +191,7 @@ pub fn ParentPicker(
             if open() {
                 div { class: "popover-backdrop", onclick: move |_| cancel() }
                 div { class: "menu",
-                    div { class: "scroll", id: "parent-lb", role: "listbox", aria_label: "Parent",
+                    div { class: "scroll", id: "{lb_id}", role: "listbox", aria_label: "{label}",
                         for (name, items) in groups {
                             div { key: "{name}", class: "grp", role: "presentation", "{name}" }
                             for o in items {
@@ -198,7 +215,9 @@ pub fn ParentPicker(
                                                 b { "{pre}" if !hit.is_empty() { mark { "{hit}" } } "{post}" }
                                                 small { "{o.context}" }
                                             }
-                                            StatePill { state: o.state.clone(), category: o.category, color: o.state_color.clone() }
+                                            if !o.state.is_empty() {
+                                                StatePill { state: o.state.clone(), category: o.category, color: o.state_color.clone() }
+                                            }
                                         }
                                     }
                                 }
@@ -214,7 +233,7 @@ pub fn ParentPicker(
                         span { kbd { "↑" } kbd { "↓" } "move" }
                         span { kbd { "Enter" } "pick" }
                         span { kbd { "Esc" } "close" }
-                        span { class: "end", "Closed {noun} are hidden" }
+                        span { class: "end", "{foot}" }
                     }
                 }
             }

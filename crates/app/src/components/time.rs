@@ -1,7 +1,8 @@
 //! 7pace time tracking UI: on each kanban card the timer and add-time actions (header), the total
 //! (footer) and the user's entries (when the card is expanded), the running-timer chip in the
 //! top bar (compact, widens on hover/focus), the add/edit time dialog (also opened by Stop, to
-//! log the timer's time), and `TimeKeeper`,
+//! log the timer's time, and from the Timetable, where it can ask for the work item), and
+//! `TimeKeeper`,
 //! which connects at startup, ticks the clock while a timer runs and re-reads the timer on window
 //! focus and every few minutes.
 
@@ -10,13 +11,15 @@ use std::time::Duration;
 use dioxus::desktop::tao::event::Event;
 use dioxus::desktop::{WindowEvent, use_wry_event_handler};
 use dioxus::prelude::*;
-use kanban_core::Card;
 use kanban_core::time::{
-    MAX_ENTRY_MINUTES, TimeEntry, format_clock, format_duration, format_hmm, hmm_from_input,
-    parse_hmm,
+    MAX_ENTRY_MINUTES, TimeEntry, clock_input, format_clock, format_duration, format_hmm,
+    format_time_of_day, hmm_from_input, parse_hmm, parse_time_of_day,
 };
+use kanban_core::{Card, CardId};
+use time::PrimitiveDateTime;
 
 use crate::components::icons;
+use crate::components::item_fields::{ParentOption, ParentPicker};
 use crate::components::pickers::{Calendar, day_label, long_date, relative_day};
 use crate::components::widgets::{Icon, short_date};
 use crate::state::{AppState, TimeDialogState, use_app};
@@ -82,14 +85,14 @@ pub fn EntryLoader(ids: Vec<kanban_core::CardId>) -> Element {
 }
 
 /// Opens the dialog to add time to `card` (empty), or to edit `entry`.
-pub fn open_time_dialog(mut st: AppState, card: &Card, entry: Option<&TimeEntry>) {
+pub fn open_time_dialog(mut st: AppState, card: CardId, entry: Option<&TimeEntry>) {
     let default_activity = st.time.peek().default_activity.clone().unwrap_or_default();
-    let fmt_time = time::macros::format_description!("[hour]:[minute]");
     let state = match entry {
         Some(e) => {
             let minutes = (e.seconds + 30) / 60;
             TimeDialogState {
-                card: card.id,
+                card,
+                pick_item: false,
                 editing: Some(e.id.clone()),
                 can_delete: e.can_delete,
                 from_timer: false,
@@ -98,7 +101,7 @@ pub fn open_time_dialog(mut st: AppState, card: &Card, entry: Option<&TimeEntry>
                 minutes,
                 duration_text: format_hmm(minutes),
                 ends_now: false,
-                start: e.start.time().format(fmt_time).unwrap_or_default(),
+                start: format_time_of_day(e.start.time()),
                 activity: e
                     .activity
                     .as_ref()
@@ -108,7 +111,8 @@ pub fn open_time_dialog(mut st: AppState, card: &Card, entry: Option<&TimeEntry>
             }
         }
         None => TimeDialogState {
-            card: card.id,
+            card,
+            pick_item: false,
             editing: None,
             can_delete: false,
             from_timer: false,
@@ -125,6 +129,100 @@ pub fn open_time_dialog(mut st: AppState, card: &Card, entry: Option<&TimeEntry>
     st.time_dialog.set(Some(state));
 }
 
+/// Opens the dialog for time at a known place (the Timetable's "Log time", or "More options"
+/// after a drag): `card` preset or asked for, starting at `start` for `seconds` (`0` = empty).
+pub fn open_time_dialog_at(
+    mut st: AppState,
+    card: Option<CardId>,
+    start: PrimitiveDateTime,
+    seconds: i64,
+    activity: Option<String>,
+) {
+    let default_activity = st.time.peek().default_activity.clone().unwrap_or_default();
+    let minutes = (seconds + 30) / 60;
+    st.time_dialog.set(Some(TimeDialogState {
+        card: card.unwrap_or(0),
+        pick_item: true,
+        editing: None,
+        can_delete: false,
+        from_timer: false,
+        timer_minutes: 0,
+        date: start.date(),
+        minutes,
+        duration_text: format_hmm(minutes),
+        ends_now: seconds == 0,
+        start: format_time_of_day(start.time()),
+        activity: activity.unwrap_or(default_activity),
+        comment: String::new(),
+    }));
+}
+
+/// Items to log time on, for the dialog's and the Timetable's picker: the ones logged on this
+/// week and the tracked one first ("recent"), then every open card of the workspace.
+pub fn loggable_items(st: AppState) -> Vec<ParentOption> {
+    let ws = st.workspace.read();
+    let t = st.time.read();
+    let mut recent: Vec<CardId> = t.week.entries.iter().filter_map(|e| e.work_item).collect();
+    recent.extend(t.timer.as_ref().map(|x| x.work_item));
+    let mut out: Vec<ParentOption> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    let option = |id: CardId, is_recent: bool| -> Option<ParentOption> {
+        if let Some(c) = ws.as_ref().and_then(|w| w.cards.get(&id)) {
+            let w = ws.as_ref()?;
+            return Some(ParentOption {
+                id,
+                title: c.title.clone(),
+                type_color: w.type_color(&c.work_item_type),
+                context: c.work_item_type.clone(),
+                state: c.state.clone(),
+                category: w.category(c),
+                state_color: w.state_color(c),
+                recent: is_recent,
+            });
+        }
+        let r = t.week.items.get(&id)?;
+        Some(ParentOption {
+            id,
+            title: r.title.clone(),
+            type_color: "6b7686".into(),
+            context: format!("{} · another team or project", r.work_item_type),
+            state: String::new(),
+            category: kanban_core::StateCategory::Proposed,
+            state_color: String::new(),
+            recent: is_recent,
+        })
+    };
+    for id in recent {
+        if seen.insert(id)
+            && let Some(o) = option(id, true)
+        {
+            out.push(o);
+        }
+    }
+    if let Some(w) = ws.as_ref() {
+        let mut cards: Vec<_> = w
+            .cards
+            .values()
+            .filter(|c| {
+                !matches!(
+                    w.category(c),
+                    kanban_core::StateCategory::Completed | kanban_core::StateCategory::Removed
+                )
+            })
+            .map(|c| c.id)
+            .collect();
+        cards.sort_unstable_by(|a, b| b.cmp(a));
+        for id in cards {
+            if seen.insert(id)
+                && let Some(o) = option(id, false)
+            {
+                out.push(o);
+            }
+        }
+    }
+    out
+}
+
 /// Stop: opens the dialog with the timer's time. The timer keeps running until the user
 /// confirms; Cancel leaves it running.
 pub fn open_stop_dialog(mut st: AppState) {
@@ -135,6 +233,7 @@ pub fn open_stop_dialog(mut st: AppState) {
     let activity = st.time.peek().default_activity.clone().unwrap_or_default();
     st.time_dialog.set(Some(TimeDialogState {
         card: timer.work_item,
+        pick_item: false,
         editing: None,
         can_delete: false,
         from_timer: true,
@@ -164,7 +263,6 @@ pub fn CardTimeActions(card: Card) -> Element {
     drop(t);
     // Only the tracked card reads the clock, so only it re-renders every second.
     let elapsed = running.map(|r| r.elapsed_secs(*st.clock.read()));
-    let add_card = card.clone();
     rsx! {
         if let Some(s) = elapsed {
             span { class: "k-live", "data-tip": "Tracking", i {} span { class: "clock", "{format_clock(s)}" } }
@@ -203,7 +301,7 @@ pub fn CardTimeActions(card: Card) -> Element {
                 aria_label: "Add time",
                 onclick: move |e| {
                     e.stop_propagation();
-                    open_time_dialog(st, &add_card, None);
+                    open_time_dialog(st, id, None);
                 },
                 Icon { svg: icons::CLOCK_PLUS }
             }
@@ -250,7 +348,7 @@ pub fn CardTimeLog(card: Card) -> Element {
     } else {
         entries.into_iter().take(SHOWN_ENTRIES).collect()
     };
-    let add_card = card.clone();
+    let id = card.id;
     rsx! {
         div { class: "time-log",
             div { class: "sec",
@@ -261,7 +359,7 @@ pub fn CardTimeLog(card: Card) -> Element {
                     draggable: "false",
                     onclick: move |e| {
                         e.stop_propagation();
-                        open_time_dialog(st, &add_card, None);
+                        open_time_dialog(st, id, None);
                     },
                     Icon { svg: icons::PLUS_14 }
                     "Time"
@@ -316,7 +414,7 @@ fn EntryRow(card: Card, entry: TimeEntry) -> Element {
             "data-tip": "{tip}",
             onclick: move |e| {
                 e.stop_propagation();
-                open_time_dialog(st, &card, Some(&entry));
+                open_time_dialog(st, card.id, Some(&entry));
             },
             span { class: "dot", style: dot.unwrap_or_default() }
             span { class: "when", "{when}" }
@@ -393,8 +491,13 @@ fn TimeDialogBody() -> Element {
     };
     let initial = use_hook(|| form.clone());
     let card_id = form.card;
+    let has_card = card_id != 0;
     // "Your time on this item" needs the card's entries, which the kanban may not have loaded.
-    use_hook(move || time_tracking::load_entries(st, vec![card_id], false));
+    use_effect(use_reactive!(|card_id| {
+        if card_id != 0 {
+            time_tracking::load_entries(st, vec![card_id], false);
+        }
+    }));
 
     let t = st.time.read();
     let activities = if t.activities_enabled {
@@ -419,7 +522,12 @@ fn TimeDialogBody() -> Element {
             }
         }
     }
-    let timer_title = t.timer.as_ref().and_then(|x| x.title.clone());
+    let timer_title = t
+        .timer
+        .as_ref()
+        .filter(|x| x.work_item == card_id)
+        .and_then(|x| x.title.clone());
+    let elsewhere_title = t.week.items.get(&card_id).map(|r| r.title.clone());
     drop(t);
 
     // The card, for the context strip.
@@ -458,6 +566,7 @@ fn TimeDialogBody() -> Element {
         .as_ref()
         .map(|c| c.title.clone())
         .or(timer_title)
+        .or(elsewhere_title)
         .unwrap_or_default();
 
     let parsed = parse_hmm(&form.duration_text);
@@ -466,11 +575,7 @@ fn TimeDialogBody() -> Element {
     let editing = form.editing.is_some();
     let now = now_local();
     let today = now.date();
-    let start_time = time::Time::parse(
-        form.start.trim(),
-        time::macros::format_description!("[hour]:[minute]"),
-    )
-    .ok();
+    let start_time = parse_time_of_day(&form.start);
     let span = time::Duration::minutes(minutes);
     let (from, to) = if form.ends_now {
         (Some(now.time() - span), Some(now.time()))
@@ -572,7 +677,8 @@ fn TimeDialogBody() -> Element {
         let Some(f) = st.time_dialog.peek().clone() else {
             return;
         };
-        if *saving.peek() || f.minutes <= 0 || parse_hmm(&f.duration_text).is_none() {
+        if *saving.peek() || f.card == 0 || f.minutes <= 0 || parse_hmm(&f.duration_text).is_none()
+        {
             return;
         }
         saving.set(true);
@@ -641,18 +747,36 @@ fn TimeDialogBody() -> Element {
                     }
                     button { class: "x", r#type: "button", aria_label: "Close", onclick: move |_| close(), Icon { svg: icons::CLOSE } }
                 }
-                div { class: "ctx", style: "--tc: #{type_color}",
-                    span { class: "stripe" }
-                    span { class: "t",
-                        b { span { class: "id", "#{card_id} " } "{card_title}" }
-                        if !context.is_empty() { small { "{context}" } }
-                    }
-                    if let Some(tot) = total {
-                        span { class: "tot", "Tracked in total" b { "{tot}" } }
+                if !form.pick_item {
+                    div { class: "ctx", style: "--tc: #{type_color}",
+                        span { class: "stripe" }
+                        span { class: "t",
+                            b { span { class: "id", "#{card_id} " } "{card_title}" }
+                            if !context.is_empty() { small { "{context}" } }
+                        }
+                        if let Some(tot) = total {
+                            span { class: "tot", "Tracked in total" b { "{tot}" } }
+                        }
                     }
                 }
 
                 div { class: "tbody",
+                    // In the padded body like the other fields (the item strip sits above it).
+                    if form.pick_item {
+                        div { class: "fld pick-item",
+                            span { class: "lbl", "Work item" }
+                            ParentPicker {
+                                options: loggable_items(st),
+                                value: has_card.then_some(card_id),
+                                noun: "work items",
+                                label: "Work item",
+                                recent_label: "Logged this week",
+                                foot: "Done items are hidden".to_owned(),
+                                autofocus: !has_card,
+                                onpick: move |id: Option<CardId>| set(&move |f| f.card = id.unwrap_or(0)),
+                            }
+                        }
+                    }
                     div { class: "row2",
                         div { class: "fld",
                             div { class: "fld-top",
@@ -669,7 +793,12 @@ fn TimeDialogBody() -> Element {
                                     placeholder: "0:00",
                                     "aria-description": "Hours and minutes",
                                     value: "{form.duration_text}",
-                                    onmounted: move |e| async move { let _ = e.set_focus(true).await; },
+                                    onmounted: move |e| async move {
+                                        // The item picker takes the focus while no item is picked.
+                                        if has_card {
+                                            let _ = e.set_focus(true).await;
+                                        }
+                                    },
                                     oninput: move |e| {
                                         let text = hmm_from_input(&e.value());
                                         set(&move |f| {
@@ -727,19 +856,30 @@ fn TimeDialogBody() -> Element {
                                         onchange: move |_| set(&|f| f.ends_now = false),
                                     }
                                     "Starts at"
+                                    // Text, not `type=time`: that follows the WebKit locale
+                                    // and can show AM/PM. Times are always 24-hour.
                                     input {
-                                        class: "tm",
-                                        r#type: "time",
-                                        aria_label: "Start time",
+                                        class: if !form.ends_now && start_time.is_none() { "tm bad" } else { "tm" },
+                                        r#type: "text",
+                                        inputmode: "numeric",
+                                        maxlength: "5",
+                                        placeholder: "HH:MM",
+                                        aria_label: "Start time, 24-hour",
+                                        aria_invalid: "{!form.ends_now && start_time.is_none()}",
                                         value: "{form.start}",
                                         onfocus: move |_| set(&|f| f.ends_now = false),
                                         oninput: move |e| {
-                                            let v = e.value();
+                                            let v = clock_input(&e.value());
                                             set(&move |f| {
                                                 f.start = v.clone();
                                                 f.ends_now = false;
                                             });
                                         },
+                                        onblur: move |_| set(&|f| {
+                                            if let Some(t) = parse_time_of_day(&f.start) {
+                                                f.start = format_time_of_day(t);
+                                            }
+                                        }),
                                     }
                                 }
                             }
@@ -891,6 +1031,7 @@ fn TimeDialogBody() -> Element {
                         }
                     }
 
+                    if has_card {
                     div { class: "fld",
                         div { class: "fld-top",
                             span { class: "lbl", "Your time on this item" }
@@ -942,6 +1083,7 @@ fn TimeDialogBody() -> Element {
                             }
                         }
                     }
+                    }
 
                     if let Some(e) = error() {
                         div { class: "banner err", style: "margin: 0", role: "alert",
@@ -980,7 +1122,7 @@ fn TimeDialogBody() -> Element {
                     button {
                         class: "btn primary",
                         r#type: "button",
-                        disabled: saving() || !has_time || (form.from_timer && st.time.read().busy),
+                        disabled: saving() || !has_time || !has_card || (form.from_timer && st.time.read().busy),
                         onclick: move |_| save_click(),
                         if saving() { span { class: "spinner" } }
                         if form.from_timer { "Stop and log" } else if editing { "Save" } else { "Add time" }

@@ -11,8 +11,11 @@ Keep new UI consistent with `crates/app/assets/main.css` and `dialogs.css` (use 
 `components/view_options.rs`; `appearance` in `docs/settings.md`). 7pace time
 tracking is on the kanban only (timer and add time in the card header, the user's entries in the
 card's expandable details, fetched in bulk for the shown cards) plus a compact running-timer chip in
-the top bar; Stop opens the time dialog and applies it to the worklog 7pace creates. The app side
-is `crates/app/src/time_tracking.rs` and `components/time.rs`.
+the top bar; Stop opens the time dialog and applies it to the worklog 7pace creates. The
+*Timetable* tab (shown while time tracking is on) is the user's week in 7pace as a schedule: click
+an entry for its details, drag to log, move or resize. Drags never create overlaps; existing ones
+are shown in red. The app side is `crates/app/src/time_tracking.rs`, `components/time.rs` and
+`components/timetable.rs`; the week's rules are `kanban-core::timetable`.
 
 ## Crate map
 
@@ -120,6 +123,9 @@ Time tracking goes through 7pace Timetracker, a **separate service**. See [docs/
   card id in a signal, not in `dataTransfer`. Background work in `services.rs` and
   `time_tracking.rs` uses `spawn_forever`: `spawn` belongs to the calling component, and a dialog
   that closes on success would cancel it (e.g. the refetch after deleting a time entry).
+- Times are always 24-hour `HH:MM`, shown and typed. Never use `<input type="time">`: it follows
+  the WebKit locale and can show AM/PM. Use a text field with `kanban_core::time::clock_input` and
+  `parse_time_of_day`.
 - Tests: unit-test `kanban-core` logic (move planning, column resolution) with fixture JSON
   captured from real ADO responses. No tests hit the live API.
 - Commits: one short subject line, no body unless asked, no AI attribution or co-author trailers.

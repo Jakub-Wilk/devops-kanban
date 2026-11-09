@@ -4,7 +4,7 @@
 //! configs + cards), ids with a write in flight (for optimistic updates and to keep sync off
 //! them), the transient drag state, the open dialogs (item: draft, original, conflict; time) and
 //! toasts, and 7pace time tracking (client,
-//! the user's entries per card, the running timer). Every field is a `Signal`, so
+//! the user's entries per card and for the Timetable's week, the running timer). Every field is a `Signal`, so
 //! `AppState` is `Copy` and can move into event handlers and tasks.
 
 use std::collections::{HashMap, HashSet};
@@ -161,12 +161,39 @@ pub struct TimeTracking {
     pub timer_read_failed: bool,
     /// A start/stop is in flight.
     pub busy: bool,
+    /// The Timetable tab's week.
+    pub week: WeekEntries,
+}
+
+/// The user's entries for one week, for the Timetable tab (see `time_tracking::load_week`).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct WeekEntries {
+    /// The week's Monday; `None` until the tab first opens.
+    pub monday: Option<Date>,
+    /// Entries with any part in the week, earliest first.
+    pub entries: Vec<TimeEntry>,
+    /// A load is running (the old entries stay shown meanwhile).
+    pub loading: bool,
+    /// `entries` belong to `monday`.
+    pub loaded: bool,
+    /// Items time was logged on that aren't in the workspace (other teams or projects).
+    pub items: HashMap<CardId, ItemRef>,
+}
+
+/// What the Timetable shows of an item outside the workspace.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ItemRef {
+    pub title: String,
+    pub work_item_type: String,
 }
 
 /// The add/edit time dialog.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TimeDialogState {
+    /// `0` while `pick_item` hasn't picked one yet.
     pub card: CardId,
+    /// The dialog asks which item to log on (opened from the Timetable without one).
+    pub pick_item: bool,
     /// Worklog uuid when editing.
     pub editing: Option<String>,
     pub can_delete: bool,

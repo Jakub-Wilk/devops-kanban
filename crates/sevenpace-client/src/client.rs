@@ -259,6 +259,21 @@ mod tests {
     }
 
     #[test]
+    fn rest_url_with_date_range() {
+        let url = client().url(
+            "rest/workLogs",
+            &[
+                ("$fromTimestamp", "2026-11-08T00:00:00".into()),
+                ("$toTimestamp", "2026-11-17T00:00:00".into()),
+            ],
+        );
+        assert_eq!(
+            url.as_str(),
+            "https://media-press.timehub.7pace.com/api/rest/workLogs?%24fromTimestamp=2026-11-08T00%3A00%3A00&%24toTimestamp=2026-11-17T00%3A00%3A00&api-version=3.2"
+        );
+    }
+
+    #[test]
     fn tracking_url() {
         assert_eq!(
             client().url("tracking/client/stopTracking/0", &[]).as_str(),

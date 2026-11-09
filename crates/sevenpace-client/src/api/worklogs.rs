@@ -28,30 +28,46 @@ impl SevenPaceClient {
                 .map(u32::to_string)
                 .collect::<Vec<_>>()
                 .join(",");
-            let mut skip = 0;
-            loop {
-                let page: Vec<WorkLogDto> = self
-                    .send_rest(
-                        Method::GET,
-                        "rest/workLogs",
-                        &[
-                            ("$workItemIds", ids.clone()),
-                            ("$count", PAGE.to_string()),
-                            ("$skip", skip.to_string()),
-                            ("$includeEditable", "true".into()),
-                        ],
-                        None::<&()>,
-                    )
-                    .await?;
-                let n = page.len();
-                out.extend(page);
-                if n < PAGE {
-                    break;
-                }
-                skip += n;
-            }
+            out.extend(self.paged(vec![("$workItemIds", ids)]).await?);
         }
         Ok(out)
+    }
+
+    /// The user's own worklogs whose timestamp is between `from` and `to` (both
+    /// `2026-11-09T00:00:00`, user-local), with `isCanEdit` / `isCanDelete`. Callers should query
+    /// a little wider than they need and filter on the parsed start: how 7pace reads these
+    /// bounds (local or UTC) isn't documented.
+    pub async fn worklogs_between(
+        &self,
+        from: &str,
+        to: &str,
+    ) -> Result<Vec<WorkLogDto>, SevenPaceError> {
+        self.paged(vec![
+            ("$fromTimestamp", from.to_owned()),
+            ("$toTimestamp", to.to_owned()),
+        ])
+        .await
+    }
+
+    /// `GET rest/workLogs` with `filters`, every page of `$count` = 500.
+    async fn paged(&self, filters: Vec<(&str, String)>) -> Result<Vec<WorkLogDto>, SevenPaceError> {
+        let mut out = Vec::new();
+        let mut skip = 0;
+        loop {
+            let mut query = filters.clone();
+            query.push(("$count", PAGE.to_string()));
+            query.push(("$skip", skip.to_string()));
+            query.push(("$includeEditable", "true".into()));
+            let page: Vec<WorkLogDto> = self
+                .send_rest(Method::GET, "rest/workLogs", &query, None::<&()>)
+                .await?;
+            let n = page.len();
+            out.extend(page);
+            if n < PAGE {
+                return Ok(out);
+            }
+            skip += n;
+        }
     }
 
     pub async fn create_worklog(&self, body: &WorkLogWrite) -> Result<WorkLogDto, SevenPaceError> {

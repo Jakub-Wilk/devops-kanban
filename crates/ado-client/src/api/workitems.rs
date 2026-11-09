@@ -1,6 +1,7 @@
 //! Work item reads and writes.
 //!
-//! - `POST {project}/_apis/wit/workitemsbatch` — ≤200 ids per call, explicit `fields`.
+//! - `POST {project}/_apis/wit/workitemsbatch` — ≤200 ids per call, explicit `fields` (also
+//!   org-scoped, `{org}/_apis/wit/workitemsbatch`, for items across projects).
 //! - `PATCH {project}/_apis/wit/workitems/{id}` — `application/json-patch+json`; first op is
 //!   always `test /rev` for optimistic concurrency.
 //! - `POST {project}/_apis/wit/workitems/${type}` — create.
@@ -24,6 +25,25 @@ impl AdoClient {
         ids: &[u32],
         fields: &[String],
     ) -> Result<Vec<WorkItemDto>, AdoError> {
+        self.batch(Scope::Project(project), ids, fields).await
+    }
+
+    /// Like [`Self::work_items_batch`], across every project of the organization (for items
+    /// that belong to other projects, such as the ones time was logged on).
+    pub async fn work_items_batch_org(
+        &self,
+        ids: &[u32],
+        fields: &[String],
+    ) -> Result<Vec<WorkItemDto>, AdoError> {
+        self.batch(Scope::Org, ids, fields).await
+    }
+
+    async fn batch(
+        &self,
+        scope: Scope<'_>,
+        ids: &[u32],
+        fields: &[String],
+    ) -> Result<Vec<WorkItemDto>, AdoError> {
         let mut out = Vec::with_capacity(ids.len());
         for chunk in ids.chunks(self.config.max_batch) {
             let body = WorkItemsBatchRequest {
@@ -32,10 +52,7 @@ impl AdoClient {
                 error_policy: "omit".into(),
             };
             let list: ListResponse<Option<WorkItemDto>> = self
-                .send(
-                    Request::new(Method::POST, Scope::Project(project), "wit/workitemsbatch")
-                        .json(&body)?,
-                )
+                .send(Request::new(Method::POST, scope, "wit/workitemsbatch").json(&body)?)
                 .await?;
             let mut by_id: std::collections::HashMap<u32, WorkItemDto> = list
                 .value
