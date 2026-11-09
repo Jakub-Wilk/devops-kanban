@@ -4,12 +4,13 @@
 //! calendar background to pan (the wheel only scrolls rows), drag a diamond to change the item's
 //! target date. "Today" brings today back into view.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use std::rc::Rc;
 use std::time::Duration;
 
 use dioxus::prelude::*;
-use kanban_core::timeline::{TimelineItem, TimelineLayout, WEEK_PX, format_long};
-use kanban_core::{Card, CardId, StateCategory};
+use kanban_core::timeline::{RowLayout, TimelineItem, TimelineLayout, WEEK_PX, format_long};
+use kanban_core::{Card, CardId, StateCategory, Workspace};
 
 use crate::components::filters::{ItemFilters, ItemTab, view_prefs};
 use crate::components::icons;
@@ -47,26 +48,54 @@ enum PointerMode {
     },
 }
 
-#[component]
-pub fn Timeline() -> Element {
-    let mut st = use_app();
-    let mut mode = use_signal(|| None::<PointerMode>);
-    let mut total_w = use_signal(|| 0.0_f64);
-    let mut info_w = use_signal(|| {
-        st.settings
-            .peek()
-            .timeline_info_width
-            .map_or(DEFAULT_INFO_PX, f64::from)
-    });
-    // Axis x at the calendar's left edge; `None` = today at a third of the width.
-    let mut scroll_x = use_signal(|| None::<f64>);
-    // Parents whose tasks are shown.
-    let mut expanded = use_signal(HashSet::<CardId>::new);
+/// Shared data compared by identity, so memos and props holding it compare in O(1). A new
+/// value only exists after the workspace or settings change.
+struct Shared<T>(Rc<T>);
 
-    let ws_guard = st.workspace.read();
-    let Some(ws) = ws_guard.as_ref() else {
-        return rsx! {};
-    };
+impl<T> Clone for Shared<T> {
+    fn clone(&self) -> Self {
+        Self(Rc::clone(&self.0))
+    }
+}
+
+impl<T> PartialEq for Shared<T> {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl<T> std::ops::Deref for Shared<T> {
+    type Target = T;
+    fn deref(&self) -> &T {
+        &self.0
+    }
+}
+
+/// Everything about a row that does not depend on the scroll position.
+struct RowData {
+    row: RowLayout,
+    card: Card,
+    category: StateCategory,
+    state_color: String,
+    /// Type colour, ADO icon id and fetched icon.
+    look: (String, Option<String>, Option<String>),
+    /// "<id> <title>" of the item's root.
+    epic: Option<String>,
+    date_text: String,
+    class: String,
+    show_icon: bool,
+}
+
+/// What the timeline shows, derived from the workspace and settings. Kept in a memo so panning,
+/// resizing and marker drags (which re-render on every pointer move) don't recompute it.
+struct TlData {
+    layout: TimelineLayout,
+    rows: Vec<Shared<RowData>>,
+    new_type: String,
+    area: String,
+}
+
+fn derive(st: crate::state::AppState, ws: &Workspace) -> TlData {
     let hierarchy = ws.hierarchy();
     let titles = services::root_titles(ws);
     let view = view_prefs(st, ws);
@@ -82,10 +111,10 @@ pub fn Timeline() -> Element {
         .flat_map(|c| hierarchy.tasks.get(&c.id).into_iter().flatten())
         .filter_map(|id| ws.cards.get(id))
         .collect();
-    let items: Vec<(Card, StateCategory, String)> = shown
+    let items: Vec<(&Card, StateCategory)> = shown
         .into_iter()
         .chain(tasks)
-        .map(|c| (c.clone(), ws.category(c), ws.state_color(c)))
+        .map(|c| (c, ws.category(c)))
         .collect();
     let new_type = ws
         .kanban_levels()
@@ -93,26 +122,14 @@ pub fn Timeline() -> Element {
         .and_then(|l| l.default_type.clone())
         .unwrap_or_else(|| "User Story".into());
     let area = crate::components::epic_list::default_area(ws);
-    // Per type: colour, ADO icon id and fetched icon, for the row style (View options).
-    let type_look: std::collections::HashMap<String, (String, Option<String>, Option<String>)> = ws
-        .type_colors
-        .keys()
-        .map(|t| {
-            (
-                t.clone(),
-                (ws.type_color(t), ws.type_icon(t), ws.type_icon_src(t)),
-            )
-        })
-        .collect();
     let style = st.settings.read().appearance.timeline.clone();
-    drop(ws_guard);
 
-    let today = today();
+    // Not reactive: picked up again whenever the workspace or settings change.
     let layout = TimelineLayout::build(
-        today,
+        today(),
         &items
             .iter()
-            .map(|(c, cat, _)| TimelineItem {
+            .map(|(c, cat)| TimelineItem {
                 id: c.id,
                 target: c.target_date,
                 open: !cat.is_done(),
@@ -120,11 +137,70 @@ pub fn Timeline() -> Element {
             })
             .collect::<Vec<_>>(),
     );
-    let by_id: std::collections::HashMap<CardId, (Card, StateCategory, String)> = items
-        .into_iter()
-        .map(|(c, cat, color)| (c.id, (c, cat, color)))
+    let by_id: HashMap<CardId, (&Card, StateCategory)> =
+        items.into_iter().map(|(c, cat)| (c.id, (c, cat))).collect();
+    let rows = layout
+        .rows
+        .iter()
+        .filter_map(|row| {
+            let &(card, category) = by_id.get(&row.id)?;
+            let t = &card.work_item_type;
+            Some(Shared(Rc::new(RowData {
+                row: row.clone(),
+                category,
+                state_color: ws.state_color(card),
+                look: (ws.type_color(t), ws.type_icon(t), ws.type_icon_src(t)),
+                epic: hierarchy
+                    .root_of
+                    .get(&row.id)
+                    .and_then(|r| titles.get(r).map(|t| format!("{r} {t}"))),
+                date_text: card
+                    .target_date
+                    .map(format_long)
+                    .unwrap_or_else(|| "No target date".into()),
+                class: format!(
+                    "tl-row{}{} {}",
+                    if row.parent.is_some() { " child" } else { "" },
+                    if style.tint { " tint" } else { "" },
+                    style.accent.class()
+                ),
+                show_icon: style.icon,
+                card: card.clone(),
+            })))
+        })
         .collect();
+    TlData {
+        layout,
+        rows,
+        new_type,
+        area,
+    }
+}
 
+#[component]
+pub fn Timeline() -> Element {
+    let st = use_app();
+    let mut mode = use_signal(|| None::<PointerMode>);
+    let mut total_w = use_signal(|| 0.0_f64);
+    let mut info_w = use_signal(|| {
+        st.settings
+            .peek()
+            .timeline_info_width
+            .map_or(DEFAULT_INFO_PX, f64::from)
+    });
+    // Axis x at the calendar's left edge; `None` = today at a third of the width.
+    let mut scroll_x = use_signal(|| None::<f64>);
+    // Parents whose tasks are shown.
+    let expanded = use_signal(HashSet::<CardId>::new);
+    let data = use_memo(move || {
+        let guard = st.workspace.read();
+        guard.as_ref().map(|ws| Shared(Rc::new(derive(st, ws))))
+    });
+
+    let Some(data) = data() else {
+        return rsx! {};
+    };
+    let layout = &data.layout;
     let total = total_w();
     let max_info = (total - MIN_TRACK_PX - SEP_PX).max(MIN_INFO_PX);
     let info = info_w().clamp(MIN_INFO_PX, max_info);
@@ -176,14 +252,17 @@ pub fn Timeline() -> Element {
             start_scroll: scroll_x.peek().unwrap_or(home),
         }));
     };
-    let mut save_width = move || {
+    let save_width = move || {
+        let mut st = st;
         let w = info_w.peek().clamp(MIN_INFO_PX, max_info).round() as u32;
         if st.settings.peek().timeline_info_width != Some(w) {
             st.settings.write().timeline_info_width = Some(w);
             services::save_settings(st);
         }
     };
-    let layout_for_up = layout.clone();
+    let data_for_up = data.clone();
+    let new_type = data.new_type.clone();
+    let area = data.area.clone();
 
     rsx! {
         div { class: "toolbar", ItemFilters { tab: ItemTab::Timeline } }
@@ -230,8 +309,9 @@ pub fn Timeline() -> Element {
             onpointerup: move |_| {
                 match mode.take() {
                     Some(PointerMode::Marker { id, start_x, dx, .. }) => {
-                        let new = layout_for_up.date_at(start_x + dx);
-                        if new != layout_for_up.date_at(start_x) {
+                        let layout = &data_for_up.layout;
+                        let new = layout.date_at(start_x + dx);
+                        if new != layout.date_at(start_x) {
                             services::set_target_date(st, id, Some(new));
                         }
                     }
@@ -296,16 +376,16 @@ pub fn Timeline() -> Element {
                         }
                     }
                 }
-                for (i, row) in layout.rows.iter().enumerate() {
+                for (i, rd) in data.rows.iter().enumerate() {
                     {
+                        let row = &rd.row;
                         if row.parent.is_some_and(|p| !expanded.read().contains(&p)) {
                             return rsx! {};
                         }
-                        let Some((card, cat, color)) = by_id.get(&row.id).cloned() else { return rsx! {} };
-                        let id = card.id;
+                        let id = row.id;
                         let is_open = expanded.read().contains(&id);
-                        let n_tasks = row.children;
-                        let epic = hierarchy.root_of.get(&id).and_then(|r| titles.get(r).map(|t| format!("{r} {t}")));
+                        let title = &rd.card.title;
+                        let date_text = &rd.date_text;
                         let dx = match current {
                             Some(PointerMode::Marker { id: m, dx, .. }) if m == id => Some(dx),
                             _ => None,
@@ -315,12 +395,6 @@ pub fn Timeline() -> Element {
                         let drag_date = marker_x
                             .filter(|_| dx.is_some_and(|d| d.abs() > 2.0))
                             .map(|x| format_long(layout.date_at(x)));
-                        let date_text = card.target_date.map(format_long).unwrap_or_else(|| "No target date".into());
-                        let edit = card.clone();
-                        let look = type_look
-                            .get(&card.work_item_type)
-                            .cloned()
-                            .unwrap_or_else(|| ("6b7686".to_owned(), None, None));
                         let start_x = row.marker_x.unwrap_or(0.0);
                         let mk_class = format!(
                             "mk{}{}",
@@ -340,58 +414,9 @@ pub fn Timeline() -> Element {
                         rsx! {
                             div {
                                 key: "{id}",
-                                class: format!(
-                                    "tl-row{}{} {}",
-                                    if row.parent.is_some() { " child" } else { "" },
-                                    if style.tint { " tint" } else { "" },
-                                    style.accent.class()
-                                ),
-                                style: "--i: {i}; --tc: #{look.0}",
-                                // Columns: ID · Pri · title (chevron, icon, title; indented like the
-                                // List) · person · status · target date.
-                                div { class: "tl-info",
-                                    span { class: "id", "{id}" }
-                                    Prio { priority: card.priority }
-                                    div { class: "c-title",
-                                        if n_tasks > 0 {
-                                            button {
-                                                class: if is_open { "twirl sm open" } else { "twirl sm" },
-                                                r#type: "button",
-                                                aria_expanded: "{is_open}",
-                                                aria_label: if is_open { "Hide the tasks of {card.title}" } else { "Show the tasks of {card.title}" },
-                                                "data-tip": if n_tasks == 1 { "1 task".to_owned() } else { format!("{n_tasks} tasks") },
-                                                onclick: move |_| {
-                                                    let mut e = expanded.write();
-                                                    if !e.remove(&id) { e.insert(id); }
-                                                },
-                                                Icon { svg: icons::CHEVRON_RIGHT }
-                                            }
-                                        } else {
-                                            span { class: "twirl-space" }
-                                        }
-                                        if style.icon {
-                                            TypeIcon { icon: look.1.clone(), src: look.2.clone(), color: look.0.clone(), label: card.work_item_type.clone() }
-                                        }
-                                        div { class: "c-text",
-                                            button {
-                                                class: "etitle sm",
-                                                r#type: "button",
-                                                aria_label: "Edit {card.title}",
-                                                onclick: move |_| open_edit(st, &edit, false),
-                                                "{card.title}"
-                                            }
-                                            if let Some(e) = epic {
-                                                span { class: "c-epic", "{e}" }
-                                            }
-                                        }
-                                    }
-                                    span { class: "c-who", Assignee { id, person: card.assigned_to.clone(), title: card.title.clone() } }
-                                    span { class: "c-state", StatePill { state: card.state.clone(), category: cat, color } }
-                                    div { class: if card.target_date.is_some() { "tl-date" } else { "tl-date none" },
-                                        span { "{date_text}" }
-                                        if row.overdue { span { class: "late", "Overdue" } }
-                                    }
-                                }
+                                class: "{rd.class}",
+                                style: "--i: {i}; --tc: #{rd.look.0}",
+                                TlInfo { data: rd.clone(), is_open, expanded }
                                 div { class: "tl-gap" }
                                 div { class: "tl-track", onpointerdown: start_pan,
                                     if today_side.is_none() {
@@ -407,7 +432,7 @@ pub fn Timeline() -> Element {
                                                 r#type: "button",
                                                 style: "left: {x}px",
                                                 "data-tip": "Target date: {date_text}. Drag to change.",
-                                                aria_label: "Target date of {card.title}: {date_text}",
+                                                aria_label: "Target date of {title}: {date_text}",
                                                 onpointerdown: move |e| {
                                                     e.prevent_default();
                                                     e.stop_propagation();
@@ -423,7 +448,7 @@ pub fn Timeline() -> Element {
                                                 class: "tl-edge {side}",
                                                 r#type: "button",
                                                 "data-tip": "Target date: {date_text}. Click to scroll there.",
-                                                aria_label: "Scroll to the target date of {card.title}: {date_text}",
+                                                aria_label: "Scroll to the target date of {title}: {date_text}",
                                                 onpointerdown: move |e| e.stop_propagation(),
                                                 onclick: move |_| if let Some(x) = focus_x { pan_to(x) },
                                                 if side == "left" { span { class: "ico flip", dangerous_inner_html: icons::CHEVRON_RIGHT } }
@@ -438,9 +463,67 @@ pub fn Timeline() -> Element {
                         }
                     }
                 }
-                if layout.rows.is_empty() {
+                if data.rows.is_empty() {
                     p { class: "empty", "No work items match these filters." }
                 }
+            }
+        }
+    }
+}
+
+/// A row's list cells: ID · Pri · title (chevron, icon, title; indented like the List) · person ·
+/// status · target date. Its own component so a pan, which re-renders the timeline on every
+/// pointer move, skips these: the props only change with the data or the expanded state.
+#[component]
+fn TlInfo(data: Shared<RowData>, is_open: bool, expanded: Signal<HashSet<CardId>>) -> Element {
+    let st = use_app();
+    let card = &data.card;
+    let id = card.id;
+    let n_tasks = data.row.children;
+    let look = &data.look;
+    let edit = data.clone();
+    rsx! {
+        div { class: "tl-info",
+            span { class: "id", "{id}" }
+            Prio { priority: card.priority }
+            div { class: "c-title",
+                if n_tasks > 0 {
+                    button {
+                        class: if is_open { "twirl sm open" } else { "twirl sm" },
+                        r#type: "button",
+                        aria_expanded: "{is_open}",
+                        aria_label: if is_open { "Hide the tasks of {card.title}" } else { "Show the tasks of {card.title}" },
+                        "data-tip": if n_tasks == 1 { "1 task".to_owned() } else { format!("{n_tasks} tasks") },
+                        onclick: move |_| {
+                            let mut e = expanded.write();
+                            if !e.remove(&id) { e.insert(id); }
+                        },
+                        Icon { svg: icons::CHEVRON_RIGHT }
+                    }
+                } else {
+                    span { class: "twirl-space" }
+                }
+                if data.show_icon {
+                    TypeIcon { icon: look.1.clone(), src: look.2.clone(), color: look.0.clone(), label: card.work_item_type.clone() }
+                }
+                div { class: "c-text",
+                    button {
+                        class: "etitle sm",
+                        r#type: "button",
+                        aria_label: "Edit {card.title}",
+                        onclick: move |_| open_edit(st, &edit.card, false),
+                        "{card.title}"
+                    }
+                    if let Some(e) = &data.epic {
+                        span { class: "c-epic", "{e}" }
+                    }
+                }
+            }
+            span { class: "c-who", Assignee { id, person: card.assigned_to.clone(), title: card.title.clone() } }
+            span { class: "c-state", StatePill { state: card.state.clone(), category: data.category, color: data.state_color.clone() } }
+            div { class: if card.target_date.is_some() { "tl-date" } else { "tl-date none" },
+                span { "{data.date_text}" }
+                if data.row.overdue { span { class: "late", "Overdue" } }
             }
         }
     }
