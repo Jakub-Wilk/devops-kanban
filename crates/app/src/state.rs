@@ -157,6 +157,8 @@ pub struct TimeTracking {
     /// Bumped by Reload so the kanban fetches entries again.
     pub generation: u64,
     pub timer: Option<TimerState>,
+    /// The last read of the timer failed (already reported; cleared by the next success).
+    pub timer_read_failed: bool,
     /// A start/stop is in flight.
     pub busy: bool,
 }

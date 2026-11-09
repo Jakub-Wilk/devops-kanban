@@ -117,7 +117,9 @@ Time tracking goes through 7pace Timetracker, a **separate service**. See [docs/
   copying with `.selectable` (it works inside draggable cards too, see `SELECTION_JS` in `main.rs`).
 - Dioxus: 0.7 APIs (`use_signal`, `use_resource`, `use_reactive!`). Pin `0.7`, since 0.8 is
   alpha with breaking Signals changes. For drag and drop, use HTML5 drag events and keep the dragged
-  card id in a signal, not in `dataTransfer`.
+  card id in a signal, not in `dataTransfer`. Background work in `services.rs` and
+  `time_tracking.rs` uses `spawn_forever`: `spawn` belongs to the calling component, and a dialog
+  that closes on success would cancel it (e.g. the refetch after deleting a time entry).
 - Tests: unit-test `kanban-core` logic (move planning, column resolution) with fixture JSON
   captured from real ADO responses. No tests hit the live API.
 - Commits: one short subject line, no body unless asked, no AI attribution or co-author trailers.

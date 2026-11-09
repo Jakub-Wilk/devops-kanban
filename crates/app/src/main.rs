@@ -33,6 +33,8 @@ const DIALOGS_CSS: &str = include_str!("../assets/dialogs.css");
 const FONTS: &str = "https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&family=Inter:wght@400;500;600;700&display=swap";
 
 fn main() {
+    // Before any other thread exists (see `init_local_offset`).
+    time_tracking::init_local_offset();
     let settings = Settings::load().unwrap_or_else(|e| {
         eprintln!("devops-kanban: ignoring unreadable config: {e}");
         Settings::default()

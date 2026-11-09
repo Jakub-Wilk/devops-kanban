@@ -123,6 +123,19 @@ fn reorder_within_column_has_no_patch() {
 }
 
 #[test]
+fn closing_does_not_reorder() {
+    // Completed items are off the backlog; ADO rejects ranking against them (TF400486).
+    let board = stories_board();
+    let card = cards()[&111354].clone();
+    let mut t = target(&board, "Closed");
+    t.previous_id = Some(1);
+    t.next_id = Some(2);
+    let plan = MovePlan::new(&board, &card, &t).unwrap();
+    assert!(plan.to_patch().is_some());
+    assert_eq!(plan.reorder, None);
+}
+
+#[test]
 fn state_not_patched_when_mapping_matches() {
     let board = stories_board();
     let mut card = cards()[&111354].clone();

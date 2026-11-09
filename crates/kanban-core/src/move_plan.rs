@@ -6,13 +6,14 @@
 //! - If the target column's `state_mappings[card.type]` differs from `card.state`, also patch
 //!   `System.State`.
 //! - Prefix every patch with `test /rev = card.rev`.
-//! - A position change inside a column is a separate `workitemsorder` call.
+//! - A position change inside a column is a separate `workitemsorder` call, except in the
+//!   Outgoing column: completed items are off the backlog and ADO rejects ranking them (TF400486).
 //! - Validate the type is allowed in the column and warn on WIP-limit overflow.
 
 use ado_client::PatchDocument;
 use serde_json::{Value, json};
 
-use crate::board::{Board, DEFAULT_LANE_ID};
+use crate::board::{Board, ColumnKind, DEFAULT_LANE_ID};
 use crate::card::{Card, CardId, fields};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -97,8 +98,11 @@ impl MovePlan {
             field_changes.push((fields::STATE.to_owned(), json!(state)));
         }
 
-        let reorder = (target.previous_id.is_some() || target.next_id.is_some())
-            .then_some((target.previous_id, target.next_id));
+        // Completed items are off the backlog, so ADO can't rank them (TF400486), and the
+        // Outgoing column doesn't show an order anyway.
+        let reorder = (column.kind != ColumnKind::Outgoing
+            && (target.previous_id.is_some() || target.next_id.is_some()))
+        .then_some((target.previous_id, target.next_id));
 
         let mut warnings = Vec::new();
         if column_changes && column.item_limit > 0 {

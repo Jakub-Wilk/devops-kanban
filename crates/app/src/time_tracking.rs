@@ -9,10 +9,14 @@
 //!
 //! Stopping goes through the time dialog (`stop_and_log`): 7pace saves the track as a worklog
 //! itself, and the dialog's changes are then applied to that entry, so nothing is logged twice.
+//!
+//! Like `services`, tasks run on the root scope (`spawn_forever`): most calls come from the time
+//! dialog, which closes on success and would otherwise cancel the refetch of the card's entries.
 
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
+use dioxus::core::spawn_forever;
 use dioxus::prelude::*;
 use kanban_core::CardId;
 use kanban_core::time::{
@@ -27,11 +31,29 @@ use crate::state::{AppState, TimeDialogState, TimeTracking, ToastKind};
 
 /// How long 7pace takes to write `CompletedWork` back to ADO, roughly.
 const TOTAL_SYNC_DELAY: Duration = Duration::from_secs(6);
+/// 7pace saves a stopped track as a worklog shortly after answering the stop: look for it this
+/// many times, this far apart.
+const STOP_LOOKUP_TRIES: u32 = 4;
+const STOP_LOOKUP_GAP: Duration = Duration::from_millis(1500);
 /// Re-read the timer this often, in case it was changed elsewhere.
 pub const TIMER_REFRESH: Duration = Duration::from_secs(5 * 60);
 
+/// The offset read at startup, see [`init_local_offset`].
+static STARTUP_OFFSET: OnceLock<UtcOffset> = OnceLock::new();
+
+/// Reads the local UTC offset. Call first thing in `main`: on Linux `time` refuses to read it
+/// once the process has other threads (tokio, the webview), and would silently give UTC.
+pub fn init_local_offset() {
+    let _ = STARTUP_OFFSET.set(UtcOffset::current_local_offset().unwrap_or(UtcOffset::UTC));
+}
+
+/// The local UTC offset: the current one where the platform allows reading it (so a DST change
+/// is picked up), else the one read at startup.
 pub fn local_offset() -> UtcOffset {
-    UtcOffset::current_local_offset().unwrap_or(UtcOffset::UTC)
+    UtcOffset::current_local_offset()
+        .ok()
+        .or_else(|| STARTUP_OFFSET.get().copied())
+        .unwrap_or(UtcOffset::UTC)
 }
 
 pub fn now_local() -> OffsetDateTime {
@@ -80,7 +102,7 @@ pub fn connect(mut st: AppState) {
             return;
         }
     };
-    spawn(async move {
+    spawn_forever(async move {
         if let Err(e) = connect_with(st, &token).await {
             st.time.write().error = Some(e);
         }
@@ -172,7 +194,7 @@ pub fn load_entries(mut st: AppState, ids: Vec<CardId>, force: bool) {
     }
     // Mark them now so a re-render doesn't fetch the same ids twice.
     st.time.write().loaded.extend(ids.iter().copied());
-    spawn(async move {
+    spawn_forever(async move {
         match client.worklogs(&ids).await {
             Ok(dtos) => {
                 let local = local_offset();
@@ -214,20 +236,32 @@ pub fn reload(mut st: AppState) {
     refresh_timer(st);
 }
 
-/// Reads the running timer from 7pace.
+/// Reads the running timer from 7pace, which may have been started or stopped elsewhere (the
+/// 7pace web UI or desktop client). A failure keeps the last known timer and is reported once,
+/// until a read succeeds again.
 pub fn refresh_timer(mut st: AppState) {
     let Some(client) = st.sevenpace.peek().clone() else {
         return;
     };
-    spawn(async move {
+    spawn_forever(async move {
         match client.current_tracking().await {
             Ok(dto) => {
                 let timer = TimerState::from_dto(&dto, now_local(), local_offset());
-                if st.time.peek().timer != timer {
-                    st.time.write().timer = timer;
+                let t = st.time.peek();
+                if t.timer != timer || t.timer_read_failed {
+                    drop(t);
+                    let mut t = st.time.write();
+                    t.timer = timer;
+                    t.timer_read_failed = false;
                 }
             }
-            Err(e) => tracing::warn!(error = %e, "couldn't read the 7pace timer"),
+            Err(e) => {
+                tracing::warn!(error = %e, "couldn't read the 7pace timer");
+                if !st.time.peek().timer_read_failed {
+                    st.time.write().timer_read_failed = true;
+                    report(st, &e, "Couldn't read the 7pace timer");
+                }
+            }
         }
     });
 }
@@ -240,7 +274,7 @@ pub fn start(mut st: AppState, id: CardId) {
     let previous = st.time.peek().timer.as_ref().map(|t| t.work_item);
     let activity = st.time.peek().default_activity.clone();
     st.time.write().busy = true;
-    spawn(async move {
+    spawn_forever(async move {
         let body = StartTracking {
             time_zone: tz_minutes(local_offset()),
             tfs_id: id,
@@ -344,12 +378,26 @@ pub async fn stop_and_log(mut st: AppState, form: TimeDialogState) -> Result<(),
         .await
         .map_err(|e| format!("Stopped, but couldn't read the new entry: {}", describe(&e)))?;
     let local = local_offset();
-    let entry = logged
-        .iter()
-        .filter_map(|d| TimeEntry::from_dto(d, local))
-        .filter(|e| e.work_item == Some(card))
-        .min_by_key(|e| (e.start - started).whole_seconds().abs())
-        .filter(|e| (e.start - started).whole_minutes().abs() <= 5);
+    let find = |logged: &[sevenpace_client::models::WorkLogDto]| {
+        logged
+            .iter()
+            .filter_map(|d| TimeEntry::from_dto(d, local))
+            .filter(|e| e.work_item == Some(card))
+            .min_by_key(|e| (e.start - started).whole_seconds().abs())
+            .filter(|e| (e.start - started).whole_minutes().abs() <= 5)
+    };
+    let mut entry = find(&logged);
+    // The worklog may not exist yet right after the stop.
+    for _ in 1..STOP_LOOKUP_TRIES {
+        if entry.is_some() {
+            break;
+        }
+        tokio::time::sleep(STOP_LOOKUP_GAP).await;
+        match client.worklogs(&[card]).await {
+            Ok(logged) => entry = find(&logged),
+            Err(e) => tracing::warn!(error = %e, "couldn't re-read the stopped timer's worklog"),
+        }
+    }
     let Some(entry) = entry else {
         toast(
             st,

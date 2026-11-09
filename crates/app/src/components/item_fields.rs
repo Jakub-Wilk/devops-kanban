@@ -609,7 +609,7 @@ pub fn StateMenu(
                 r#type: "button",
                 aria_haspopup: "listbox",
                 aria_expanded: "{open()}",
-                aria_label: "State: {value}",
+                aria_label: "Status: {value}",
                 onclick: move |_| open.toggle(),
                 StatePill { state: value.clone(), category, color }
                 span { class: "chev", Icon { svg: icons::CHEVRON_DOWN } }
@@ -619,7 +619,7 @@ pub fn StateMenu(
                 div {
                     class: "menu",
                     role: "listbox",
-                    aria_label: "State",
+                    aria_label: "Status",
                     onkeydown: move |e| if e.key() == Key::Escape {
                         e.stop_propagation();
                         open.set(false);

@@ -62,7 +62,7 @@ The access token lasts 1 h.
 | Worklogs | `POST /api/rest/workLogs` | **Log time on a work item** |
 | Worklogs | `POST /api/rest/workLogs/batch` | Create ≤500 at once; `$validateOnly=true` for a dry run |
 | Worklogs | `PATCH /api/rest/workLogs/{id}` | Edit (uuid). Omitted fields keep their values |
-| Worklogs | `DELETE /api/rest/workLogs/{id}` | Delete |
+| Worklogs | `DELETE /api/rest/workLogs/{id}` | Delete. **Verified:** the response body is empty (no `{ data }`) |
 | Activity types | `GET /api/rest/activityTypes` | `{isEnabled, defaultActivity, activityTypes:[{id, name, color}]}` |
 | Timer | `POST /api/tracking/client/startTracking` | Start the live timer on a work item |
 | Timer | `POST /api/tracking/client/stopTracking/0` | Stop it (`0` = stopped by the client, `1` = idle or locked) |
@@ -121,6 +121,24 @@ runs switches it (7pace stops and saves the old one).
 ```
 
 `track` is null when nothing runs; `trackingState: "idle"` also counts as not running.
+**Verified (media-press):** the live API sends `trackingState` (and `responseState`) as
+integers, not the spec's strings: `0` = tracking, `1` = not tracking. After a stop, `track` is
+**not** null: it still holds the last track (`tfsId`, `currentTrackStartedDateTime`), with
+`trackingState: 1` and `currentTrackLength: 0`. So only the state says whether a timer runs.
+`currentTrackStartedDateTime` is naive **local** time: a running reply's `timestamp` (.NET ticks,
+UTC) was 15:31:28 while the track started at 16:31:02 with 26 s elapsed (UTC+1). `workItem` is
+null in both captures, so the title comes from ADO, not 7pace.
+Captured shape (abridged):
+
+```json
+{ "track": { "tfsId": 118371, "workItem": null, "trackingState": 1, "currentTrackLength": 0,
+             "currentTrackStartedDateTime": "2026-11-06T15:57:24.283", "workLogId": null, … },
+  "trackSettings": { "isTrackingStartAllowed": true, "responseState": 0, "responseMessage": null },
+  "settings": { … }, "timestamp": 639295757881603968 }
+```
+
+The client reads every tracking field leniently (numbers kept as their decimal text). With
+`RUST_LOG=sevenpace_client=debug` it logs each tracking response.
 `trackSettings.responseState` `Error`/`AuthError` with a `responseMessage` can refuse a start
 without an HTTP error. Only one timer runs per
 user, and the 7pace web UI or desktop client may start or stop it too, so read `current` before showing
@@ -170,8 +188,9 @@ Kanban only (`crates/app/src/time_tracking.rs`, `components/time.rs`):
   the card's entries are refetched and the ADO card is refetched ~6 s later for `CompletedWork`.
 - **Stop:** opens the time dialog with the timer's time; the timer keeps running until the user
   confirms. Confirming calls `stopTracking/0`, which saves the track as a worklog by itself, so the
-  app never creates a second one: it reads the card's worklogs, takes the entry that starts at the
-  timer's start (±5 min), and `PATCH`es it only if the user changed the duration, timing, activity
+  app never creates a second one: it reads the card's worklogs (up to 4 times, 1.5 s apart, as the
+  worklog can appear a moment after the stop), takes the entry that starts at the timer's start
+  (±5 min), and `PATCH`es it only if the user changed the duration, timing, activity
   or comment. An untouched duration keeps 7pace's exact length.
 
 ## Unverified
@@ -185,5 +204,5 @@ JSON in those shapes. Test these with a real token:
 - The minimum duration and any rounding on writes.
 - The exact role needed to log time for another user via `userId`.
 - CORS (irrelevant for the desktop app).
-- That `currentTrackStartedDateTime` is local time (the app treats a value without an offset as
-  local, and falls back to `now − currentTrackLength`).
+- `trackingState` values other than `0` (tracking) and `1` (not tracking), and the numeric `responseState` values (see Live
+  timer).

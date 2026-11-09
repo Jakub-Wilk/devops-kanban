@@ -204,20 +204,21 @@ pub struct TimerState {
 
 impl TimerState {
     /// `None` when nothing is being tracked. The start is 7pace's `currentTrackStartedDateTime`
-    /// (naive values are local), else `now - currentTrackLength`.
+    /// (naive values are local), else `now - currentTrackLength`. A start in the future means the
+    /// offsets disagree (7pace's notion of local time isn't ours), so the length wins then.
     pub fn from_dto(dto: &TrackingStateDto, now: OffsetDateTime, local: UtcOffset) -> Option<Self> {
         let work_item = dto.tracking()?;
         let track = dto.track.as_ref()?;
+        let from_length = track
+            .current_track_length
+            .map(|len| now - time::Duration::seconds(len.max(0)));
         let started = track
             .current_track_started_date_time
             .as_deref()
             .and_then(|s| parse_local_timestamp(s, local))
             .map(|t| t.assume_offset(local))
-            .or_else(|| {
-                track
-                    .current_track_length
-                    .map(|len| now - time::Duration::seconds(len))
-            })
+            .filter(|t| from_length.is_none() || *t <= now + time::Duration::MINUTE)
+            .or(from_length)
             .unwrap_or(now);
         Some(Self {
             work_item,
@@ -328,6 +329,31 @@ mod tests {
         assert!(!e.can_edit && e.can_delete);
     }
 
+    /// `current/false` with a timer running, captured from the media-press org (trimmed
+    /// `settings`). Its `timestamp` (.NET ticks) is 15:31:28.67 UTC, so the naive start is local
+    /// time (UTC+1): 16:31:02.657 + 26 s.
+    #[test]
+    fn running_timer_from_live_response() {
+        let dto: TrackingStateDto = serde_json::from_str(
+            r#"{"track":{"tfsId":118371,"remark":"","activityTypeId":"52028856-e066-4f8f-9d80-9fcc4b77a87a",
+               "workItem":null,"trackingState":0,"stoppedTrackType":null,
+               "activityCheck":{"isRunning":false,"secondsLeft":0},"currentTrackLength":26,
+               "billableTrackLength":null,"totalMeTodayLength":null,"totalMeLength":null,
+               "totalTeamLength":-1,"trackAdjustmentLength":null,
+               "currentTrackStartedDateTime":"2026-11-06T16:31:02.657","stateChangeDateTime":null,
+               "trackTimeZone":null,"workLogId":null},
+               "trackSettings":{"isTrackingStartAllowed":true,"responseState":0,"responseMessage":null},
+               "settings":{"activityType":{"isEnabled":true},"userInfo":null},
+               "timestamp":639295758886715157}"#,
+        )
+        .unwrap();
+        let now = datetime!(2026-11-06 15:31:28 UTC).to_offset(offset!(+1));
+        let t = TimerState::from_dto(&dto, now, offset!(+1)).unwrap();
+        assert_eq!(t.work_item, 118371);
+        assert_eq!(t.title, None);
+        assert_eq!(t.elapsed_secs(now), 26);
+    }
+
     #[test]
     fn timer_start_from_length_or_timestamp() {
         let now = datetime!(2026-11-04 09:10:00 +1);
@@ -343,6 +369,13 @@ mod tests {
         .unwrap();
         let t = TimerState::from_dto(&dto, now, offset!(+1)).unwrap();
         assert_eq!(t.elapsed_secs(now), 600);
+        // Started "an hour ahead": the timestamp was read in the wrong offset; trust the length.
+        let dto: TrackingStateDto = serde_json::from_str(
+            r#"{"track":{"tfsId":7,"currentTrackStartedDateTime":"2026-11-04T10:05:00","currentTrackLength":300}}"#,
+        )
+        .unwrap();
+        let t = TimerState::from_dto(&dto, now, offset!(+1)).unwrap();
+        assert_eq!(t.elapsed_secs(now), 300);
         assert_eq!(
             TimerState::from_dto(&TrackingStateDto::default(), now, offset!(+1)),
             None

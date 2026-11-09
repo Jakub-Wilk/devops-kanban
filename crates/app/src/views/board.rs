@@ -105,7 +105,7 @@ pub fn Board(project: String, team: String, board: String) -> Element {
     let has_ws = loaded.is_some();
     drop(ws_guard);
     let last_sync = st.last_sync.read().and_then(|t| {
-        t.to_offset(time::UtcOffset::current_local_offset().unwrap_or(time::UtcOffset::UTC))
+        t.to_offset(crate::time_tracking::local_offset())
             .format(time::macros::format_description!("[hour]:[minute]"))
             .ok()
     });
@@ -122,6 +122,14 @@ pub fn Board(project: String, team: String, board: String) -> Element {
         div {
             class: "app",
             tabindex: "-1",
+            // A kanban card dragged off every column (gaps, headers, toolbar, top bar): no drop
+            // slot, so the board shows nothing where a drop wouldn't land. Columns, cards and
+            // column tails stop the event. No `prevent_default`, so the cursor says "no drop".
+            ondragover: move |_| {
+                if st.drop_slot.peek().is_some() {
+                    st.drop_slot.set(None);
+                }
+            },
             onkeydown: move |e| {
                 if e.key() == Key::Character("/".into()) && st.dialog.peek().is_none() {
                     e.prevent_default();

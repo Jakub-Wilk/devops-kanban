@@ -70,9 +70,9 @@ impl SevenPaceClient {
 
     pub async fn delete_worklog(&self, id: &str) -> Result<(), SevenPaceError> {
         let path = format!("rest/workLogs/{id}");
-        let _: serde_json::Value = self
-            .send_rest(Method::DELETE, &path, &[], None::<&()>)
-            .await?;
-        Ok(())
+        // The response body is empty: parsing it as `{ data }` failed although the entry was
+        // deleted ("EOF while parsing a value").
+        self.send_rest_no_content(Method::DELETE, &path, &[], None::<&()>)
+            .await
     }
 }

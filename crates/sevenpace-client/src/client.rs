@@ -2,9 +2,10 @@
 //!
 //! Responsibilities: URL building (`{base}/api/...`), the required `api-version` query param,
 //! the auth header, unwrapping the REST `{ "data": … }` envelope (the tracking endpoints return
-//! their model unwrapped), and mapping failures to [`SevenPaceError`]. Errors arrive as
-//! `{ status, errorCode, errorDescription, fields }` (v3.2 spec); the older
-//! `{ "error": { code, message } }` shape is accepted too. Only GETs are retried (once, on 5xx).
+//! their model unwrapped, and a `DELETE` returns no body), and mapping failures to
+//! [`SevenPaceError`]. Errors arrive as `{ status, errorCode, errorDescription, fields }` (v3.2
+//! spec); the older `{ "error": { code, message } }` shape is accepted too. Only GETs are retried
+//! (once, on 5xx).
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -87,6 +88,17 @@ impl SevenPaceClient {
         Ok(env.data)
     }
 
+    /// A REST call whose response body is ignored (7pace answers a `DELETE` with an empty body).
+    pub(crate) async fn send_rest_no_content(
+        &self,
+        method: Method,
+        path: &str,
+        query: &[(&str, String)],
+        body: Option<&(impl Serialize + ?Sized)>,
+    ) -> Result<(), SevenPaceError> {
+        self.send(method, path, query, body).await.map(drop)
+    }
+
     /// A tracking call (`tracking/client/...`), whose model is not wrapped.
     pub(crate) async fn send_tracking<T: DeserializeOwned>(
         &self,
@@ -95,7 +107,15 @@ impl SevenPaceClient {
         body: Option<&(impl Serialize + ?Sized)>,
     ) -> Result<T, SevenPaceError> {
         let bytes = self.send(method, path, &[], body).await?;
-        Ok(serde_json::from_slice(&bytes)?)
+        // The tracking shapes come from the spec, not a live capture: log what 7pace sends
+        // (no secrets: the token is only in the request header).
+        let text = String::from_utf8_lossy(&bytes);
+        let text = truncate(&text, 4000);
+        tracing::debug!(path, body = %text, "7pace tracking response");
+        serde_json::from_slice(&bytes).map_err(|e| {
+            tracing::warn!(path, error = %e, body = %text, "unexpected 7pace tracking response");
+            e.into()
+        })
     }
 
     async fn send(
@@ -140,6 +160,18 @@ impl SevenPaceClient {
             return Err(map_error(status, &bytes, retry_after));
         }
     }
+}
+
+/// At most `max` bytes of `s`, cut on a char boundary.
+fn truncate(s: &str, max: usize) -> &str {
+    if s.len() <= max {
+        return s;
+    }
+    let mut end = max;
+    while !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    &s[..end]
 }
 
 /// Maps a non-success response to [`SevenPaceError`].

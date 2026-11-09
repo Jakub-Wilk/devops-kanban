@@ -1,5 +1,5 @@
 //! Filters of the board screen: the shared iteration, and each tab's own assignees (`@me`,
-//! `@unassigned` or a `unique_name`), area paths, epic states and work item states, as saved in
+//! `@unassigned` or a `unique_name`), area paths, epic statuses and work item statuses, as saved in
 //! [`TabFilters`] and [`crate::BoardPrefs`]. Also which states the kanban shows, for the status
 //! filter's options. And the List's tree: every level from the root down to tasks, with the
 //! ancestors of matching items kept as context.
@@ -117,8 +117,8 @@ pub fn epic_rows<'a>(
 
 /// Backlog items without a parent ([`Hierarchy::orphans`]), each with its matching descendants,
 /// for the List's "without a parent" group. An orphan shows when it or something below it
-/// matches the work item filters and the search. With an epic state filter they're left out:
-/// they have no epic.
+/// matches the work item filters and the search. The epic status filter doesn't apply: they
+/// have no epic.
 pub fn orphan_rows(
     ws: &Workspace,
     hierarchy: &Hierarchy,
@@ -126,9 +126,6 @@ pub fn orphan_rows(
     iteration: Option<&str>,
     text: impl Fn(&Card) -> bool,
 ) -> Vec<(CardId, Vec<CardId>)> {
-    if !prefs.epic_states.is_empty() {
-        return Vec::new();
-    }
     let me = ws.me.as_ref();
     hierarchy
         .orphans
@@ -207,7 +204,7 @@ pub fn list_levels(ws: &Workspace) -> Vec<(String, Vec<String>)> {
 
 /// The List as a flat tree: each epic from [`epic_rows`], then its descendants depth-first, each
 /// followed by its tasks; then the items without a parent ([`orphan_rows`], `orphan` set) the
-/// same way. Descendants that don't match the filters still show (as `context`) when something
+/// same way (the epic status filter only narrows the epics). Descendants that don't match the filters still show (as `context`) when something
 /// below them does.
 pub fn list_rows(
     ws: &Workspace,
@@ -344,8 +341,8 @@ pub fn sort_siblings<K: Ord>(rows: Vec<ListRow>, key: impl Fn(&ListRow) -> K) ->
     out
 }
 
-/// Work items (not roots) for the timeline. With an epic state filter, items without an epic
-/// are left out. Tasks whose parent is loaded are left out too: they follow their parent (see
+/// Work items (not roots) for the timeline. The epic status filter applies to items in an epic;
+/// items without one stay in. Tasks whose parent is loaded are left out too: they follow their parent (see
 /// [`Hierarchy::tasks`]) rather than being filtered themselves.
 pub fn timeline_items<'a>(
     ws: &'a Workspace,
@@ -366,7 +363,7 @@ pub fn timeline_items<'a>(
                     .root_of
                     .get(&c.id)
                     .and_then(|r| ws.cards.get(r))
-                    .is_some_and(|e| matches_states(&e.state, &prefs.epic_states))
+                    .is_none_or(|e| matches_states(&e.state, &prefs.epic_states))
         })
         .collect()
 }
@@ -480,6 +477,84 @@ mod tests {
             .iter()
             .position(|t| *t == c.work_item_type)
             .unwrap_or(3)
+    }
+
+    /// A workspace with Epics as the root level and Tasks as the task backlog.
+    fn workspace(cards: HashMap<CardId, Card>) -> Workspace {
+        let mut ws: Workspace = serde_json::from_value(serde_json::json!({
+            "project": "P", "team": "T",
+            "levels": [{ "name": "Epics", "rank": 0, "work_item_types": ["Epic"],
+                         "default_type": "Epic", "is_portfolio": true }],
+            "task_types": ["Task"],
+            "states": { "types": {} },
+            "scope": { "project": "P", "team": "T", "team_field": "System.AreaPath",
+                       "team_values": [], "work_item_types": [], "completed_states": [],
+                       "order_field": "Microsoft.VSTS.Common.StackRank" },
+            "fields": [], "cards": {}, "boards": {}, "board_errors": {},
+            "iterations": [], "areas": [], "me": null, "synced_to": null
+        }))
+        .unwrap();
+        ws.cards = cards;
+        ws
+    }
+
+    /// [`tree`] with Epic 1 `Active`, plus a parentless story 21 and Epic 40 `New` with story 41.
+    fn filter_fixture() -> (Workspace, Hierarchy) {
+        let (mut cards, _) = tree();
+        cards.extend([
+            node(21, None, "User Story", 1.0),
+            node(40, None, "Epic", 2.0),
+            node(41, Some(40), "User Story", 1.0),
+        ]);
+        for c in cards.values_mut() {
+            c.state = "Active".into();
+        }
+        if let Some(e) = cards.get_mut(&40) {
+            e.state = "New".into();
+        }
+        let h = Hierarchy::build(&cards, &["Epic".into()], &["Task".into()]);
+        (workspace(cards), h)
+    }
+
+    #[test]
+    fn epic_status_filter_keeps_items_without_a_parent() {
+        let (ws, h) = filter_fixture();
+        let prefs = TabFilters {
+            epic_states: vec!["Active".into()],
+            ..TabFilters::default()
+        };
+        let epics: Vec<CardId> = epic_rows(&ws, &h, &prefs, None, |_| true)
+            .iter()
+            .map(|(e, _)| e.id)
+            .collect();
+        assert_eq!(epics, [1], "the New epic is filtered out");
+        let orphans: Vec<CardId> = orphan_rows(&ws, &h, &prefs, None, |_| true)
+            .iter()
+            .map(|(id, _)| *id)
+            .collect();
+        assert_eq!(orphans, [21], "parentless items stay");
+        let rows: Vec<CardId> = list_rows(&ws, &h, &prefs, None, |_| true)
+            .iter()
+            .map(|r| r.id)
+            .collect();
+        assert!(rows.contains(&21));
+        assert!(!rows.contains(&40) && !rows.contains(&41), "{rows:?}");
+    }
+
+    #[test]
+    fn timeline_epic_status_filter_keeps_items_without_an_epic() {
+        let (ws, h) = filter_fixture();
+        let prefs = TabFilters {
+            epic_states: vec!["Active".into()],
+            ..TabFilters::default()
+        };
+        let mut ids: Vec<CardId> = timeline_items(&ws, &h, &prefs, None)
+            .iter()
+            .map(|c| c.id)
+            .collect();
+        ids.sort_unstable();
+        // Task 5's parent is loaded, so it follows story 3 rather than being listed.
+        assert_eq!(ids, [2, 3, 4, 21]);
     }
 
     #[test]

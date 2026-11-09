@@ -599,7 +599,7 @@ fn DialogBody() -> Element {
         (true, Some(c)) if form.state != d.original.state => {
             Some(format!("Saving moves the card to the “{c}” column."))
         }
-        (true, Some(_)) => Some("Changing the state moves the card on the board.".to_owned()),
+        (true, Some(_)) => Some("Changing the status moves the card on the board.".to_owned()),
         _ => None,
     };
     let me_name = me.as_ref().map(|m| m.unique_name.clone());
@@ -865,7 +865,7 @@ fn DialogBody() -> Element {
                         }
                         div { class: "fld",
                             div { class: "fld-top",
-                                span { class: "lbl", "State" }
+                                span { class: "lbl", "Status" }
                                 if changed(ItemField::State) {
                                     span { class: "changed", "Changed" }
                                 } else if !state_hint.is_empty() {

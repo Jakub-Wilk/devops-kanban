@@ -1,12 +1,17 @@
 //! Bridge between UI and `kanban-core`: builds the `AdoClient` from settings + keyring, runs
 //! loads/moves/edits as async tasks, applies optimistic updates to the workspace and rolls back
 //! on failures (refetching on `AdoError::Conflict`), and owns the `SyncEngine` background task.
+//!
+//! Tasks are started with `spawn_forever` (root scope), not `spawn`: `spawn` ties a task to the
+//! calling component, and callers are often dialogs that close as soon as they hand off, which
+//! would cancel the work mid-flight.
 
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
 use ado_client::{AdoClient, AdoError, ClientConfig, PatAuth, PatchDocument, WorkItemDto};
+use dioxus::core::spawn_forever;
 use dioxus::prelude::*;
 use kanban_core::card::{Card, CardId, Person, fields};
 use kanban_core::{
@@ -46,7 +51,7 @@ fn push_toast(mut st: AppState, kind: ToastKind, text: String, move_back: Option
         text,
         move_back,
     });
-    spawn(async move {
+    spawn_forever(async move {
         tokio::time::sleep(Duration::from_secs(TOAST_SECS)).await;
         st.toasts.write().retain(|t| t.id != id);
     });
@@ -131,7 +136,7 @@ pub fn open_workspace(mut st: AppState, project: String, team: String, force: bo
     } else {
         st.status.set(Status::Refreshing);
     }
-    spawn(async move {
+    spawn_forever(async move {
         match Workspace::load(&client, &project, &team).await {
             Ok(ws) => {
                 if settings.cache_enabled
@@ -171,7 +176,7 @@ fn start_sync(mut st: AppState) {
     };
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
     tokio::spawn(engine.run(since.unwrap_or_else(OffsetDateTime::now_utc), tx));
-    let task = spawn(async move {
+    let task = spawn_forever(async move {
         while let Some(event) = rx.recv().await {
             match event {
                 SyncEvent::Changed(items) => {
@@ -239,7 +244,7 @@ async fn refetch(st: AppState, client: &AdoClient, project: &str, id: CardId) {
 
 /// Refetches one card from ADO after `delay` (e.g. for 7pace's `CompletedWork` sync).
 pub fn reload_card_later(st: AppState, id: CardId, delay: Duration) {
-    spawn(async move {
+    spawn_forever(async move {
         tokio::time::sleep(delay).await;
         let Some(client) = st.client.peek().clone() else {
             return;
@@ -367,7 +372,7 @@ fn move_card_inner(
     }
     begin(st, id);
     let board = board.to_owned();
-    spawn(async move {
+    spawn_forever(async move {
         let mut result = Ok(());
         if let Some(patch) = plan.to_patch() {
             match client.update_work_item(&project, id, &patch).await {
@@ -456,7 +461,7 @@ pub fn patch_item(
         local(card);
     }
     begin(st, id);
-    spawn(async move {
+    spawn_forever(async move {
         let result = client.update_work_item(&project, id, &patch).await;
         end(st, id);
         match result {
@@ -537,7 +542,7 @@ pub fn set_task_done(st: AppState, id: CardId, done: bool) {
         None => toast(
             st,
             ToastKind::Warn,
-            "This work item type has no state for that.",
+            "This work item type has no status for that.",
         ),
     }
 }
@@ -569,7 +574,7 @@ pub fn reorder_item(mut st: AppState, id: CardId, prev: Option<CardId>, next: Op
         }
     }
     begin(st, id);
-    spawn(async move {
+    spawn_forever(async move {
         let result = client.reorder(&project, &team, id, prev, next).await;
         end(st, id);
         match result {

@@ -597,16 +597,27 @@ fn ColumnCell(
 ) -> Element {
     let mut st = use_app();
     let mut show_closed = use_signal(|| false);
-    let slot = st.drop_slot.read().clone();
-    let dragging = match *st.drag.read() {
+    // Memos, so a moving drop slot re-renders only the column it leaves and the one it enters
+    // (reading the signals directly re-rendered every column of every lane on each change).
+    let dragging = use_memo(move || match *st.drag.read() {
         Some(Drag::Card(id)) => Some(id),
         _ => None,
-    };
-    let here = slot
-        .as_ref()
-        .filter(|s| s.column_id == column.id && s.lane_id == lane_id && dragging.is_some());
+    })();
+    // `Some(before)` when the drop slot is in this cell.
+    let slot_here = use_memo(use_reactive(
+        (&column.id, &lane_id),
+        move |(column_id, lane_id)| {
+            st.drop_slot
+                .read()
+                .as_ref()
+                .filter(|s| s.column_id == column_id && s.lane_id == lane_id)
+                .map(|s| s.before)
+        },
+    ))();
+    let before = slot_here.filter(|_| dragging.is_some());
+    let here = before.is_some();
     let incoming = dragging.is_some_and(|d| !cards.iter().any(|c| c.id == d));
-    let over_limit = here.is_some()
+    let over_limit = here
         && incoming
         && wip_on
         && column.item_limit > 0
@@ -615,10 +626,9 @@ fn ColumnCell(
     let closed_cards: Vec<(CardId, Card)> = cards.iter().map(|c| (c.id, c.clone())).collect();
     let class = format!(
         "col{}{}",
-        if here.is_some() { " over" } else { "" },
+        if here { " over" } else { "" },
         if over_limit { " over-limit" } else { "" }
     );
-    let before = here.map(|s| s.before);
     let col_id = column.id.clone();
     let lane = lane_id.clone();
     let col_for_drop = column.id.clone();
@@ -629,7 +639,7 @@ fn ColumnCell(
     let empty = cards.iter().all(|c| Some(c.id) == dragging);
     // The done (Outgoing) column doesn't list its items: dropping on it closes one.
     let closing = column.kind == kanban_core::ColumnKind::Outgoing;
-    let zone_class = if here.is_some() && incoming {
+    let zone_class = if here && incoming {
         "close-zone over"
     } else {
         "close-zone"
@@ -644,6 +654,8 @@ fn ColumnCell(
             ondragover: move |e| {
                 if dragging.is_none() { return; }
                 e.prevent_default();
+                // Handled: the page's handler clears the slot only outside every column.
+                e.stop_propagation();
                 let same = st.drop_slot.peek().as_ref().is_some_and(|s| s.column_id == col_id && s.lane_id == lane);
                 if !same {
                     st.drop_slot.set(Some(DropSlot { column_id: col_id.clone(), lane_id: lane.clone(), before: None }));
@@ -657,7 +669,7 @@ fn ColumnCell(
                 div { class: "{zone_class}",
                     div { class: "close-zone-inner",
                         Icon { svg: icons::CHECK }
-                        strong { if here.is_some() && incoming { "Release to close" } else { "Drop here to close" } }
+                        strong { if here && incoming { "Release to close" } else { "Drop here to close" } }
                         span { "data-tip": "Closed items stay listed on the List and Timeline", "{total} closed in the last {window} days" }
                         if !closed_cards.is_empty() {
                             button {
@@ -774,7 +786,8 @@ fn CardView(
     let mut hover_open = use_signal(|| false);
     let pinned = pin == Some(true);
     let id = card.id;
-    let dragging = *st.drag.read() == Some(Drag::Card(id));
+    // A memo: a drag start or end re-renders only the dragged card.
+    let dragging = use_memo(move || *st.drag.read() == Some(Drag::Card(id)))();
     let pending = st.pending.read().contains(&id);
     let tracking = st
         .time

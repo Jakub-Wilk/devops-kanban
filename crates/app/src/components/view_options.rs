@@ -165,13 +165,13 @@ fn KanbanOptions() -> Element {
         h3 { class: "vo-title", "Kanban cards" }
         Toggle {
             label: "Background tint",
-            help: "Lean each card towards its state's colour.",
+            help: "Lean each card towards its status colour.",
             on: k.tint,
             onchange: move |v| set(&move |a| a.kanban.tint = v),
         }
         AccentPicker {
             label: "Accent bar",
-            help: "A bar in the state's colour on one edge of each card.",
+            help: "A bar in the status colour on one edge of each card.",
             value: k.accent,
             on_pick: move |v| set(&move |a| a.kanban.accent = v),
         }

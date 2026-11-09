@@ -55,8 +55,8 @@ keys get the defaults, which match the original look.
 | `appearance.timeline.tint`   | bool   | `false` | Timeline rows: the same three options as the List, on the row's info column. Defaults keep the plain look |
 | `appearance.timeline.accent` | string | `off`   | 〃 accent bar: `left`, `right` or `off` |
 | `appearance.timeline.icon`   | bool   | `false` | 〃 type icon before the title |
-| `appearance.kanban.tint`     | bool   | `false` | Kanban cards lean their background towards their state colour |
-| `appearance.kanban.accent`   | string | `left`  | 4 px bar in the state colour on kanban cards: `left`, `right` or `off` |
+| `appearance.kanban.tint`     | bool   | `false` | Kanban cards lean their background towards their status colour |
+| `appearance.kanban.accent`   | string | `left`  | 4 px bar in the status colour on kanban cards: `left`, `right` or `off` |
 | `appearance.kanban.hover_widen` | bool | `false` | The column under the mouse widens while the others narrow (same total width); the done column never widens and resets to equal widths |
 | `appearance.kanban.hover_open`  | bool | `false` | Cards open as soon as they are hovered and close shortly after the mouse leaves; a pin replaces the expand chevron and keeps a card open at the top of its column |
 
@@ -101,10 +101,10 @@ search box is not saved. Empty lists mean "no filter".
 |-------------------------|----------|---------|---------|
 | `iteration`             | string?  | none    | Iteration path from the header picker (includes child iterations) |
 | `list_sort`             | string   | `backlog` | Order of the List within each parent: `backlog` (ADO rank; the only order you can drag in), `target_date` or `priority` |
-| `<tab>.epic_states`     | string[] | `[]`    | Epic states shown |
+| `<tab>.epic_states`     | string[] | `[]`    | Epic statuses shown |
 | `<tab>.assignees`       | string[] | `[]`    | `@me`, `@unassigned` or a `uniqueName` |
 | `<tab>.areas`           | string[] | `[]`    | Area paths, each including the areas below it |
-| `<tab>.item_states`     | string[] | `[]`    | Work item states shown. Offered: the states of the kanban columns that aren't hidden |
+| `<tab>.item_states`     | string[] | `[]`    | Work item statuses shown. Offered: the statuses of the kanban columns that aren't hidden |
 
 ```toml
 [views."IT Finance/IT Finance Team"]
