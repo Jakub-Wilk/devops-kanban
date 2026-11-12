@@ -448,6 +448,14 @@ main.panel.fill .board-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; -
 .ghost.filter .ico:last-child { color: var(--faint); }
 .ghost.filter .sum { font-weight: 600; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ghost.filter.on { border-color: var(--accent); background: rgba(120, 166, 255, .1); }
+/* A set filter's on/off checkbox, drawn inside its button (or the Epic picker). Off: dashed,
+   selection struck through. */
+.filter-toggle { position: absolute; left: 12px; top: 50%; z-index: 1; width: 14px; height: 14px; margin: 0; transform: translateY(-50%); accent-color: var(--accent); cursor: pointer; }
+.ghost.filter.has-toggle { padding-left: 34px; }
+.ghost.filter.paused { border-style: dashed; }
+.ghost.filter.paused .sum { color: var(--faint); text-decoration: line-through; }
+.select-wrap.has-toggle .lead { left: 34px; }
+.select-wrap.paused select { border-style: dashed; color: var(--faint); text-decoration: line-through; }
 .popover h3 { margin: 4px 8px 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); }
 .check { display: flex; align-items: center; gap: var(--s3); min-height: 36px; padding: 0 var(--s2); border-radius: var(--r-md); cursor: pointer; }
 .check:hover { background: var(--chip); }

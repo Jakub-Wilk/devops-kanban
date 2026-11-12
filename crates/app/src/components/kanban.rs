@@ -1,6 +1,7 @@
 //! "Kanban" tab: the team's real board for one backlog level (columns, WIP limits, swimlanes
 //! and state mappings from ADO), with a Features/Stories switcher, a Columns menu to hide
-//! columns, epic, assignee and area filters (all saved per board), and drag-and-drop
+//! columns, epic, assignee and area filters (all saved per board, each with a checkbox that
+//! switches it off without losing the selection), and drag-and-drop
 //! between and within columns ("Move back" on the toast afterwards). Column headers show how many
 //! cards the filters hide and, when one person's cards are shown, a WIP meter of those cards;
 //! under them a "New" button per column opens the item dialog with that column's state. Both
@@ -143,12 +144,15 @@ pub fn Kanban(board: String) -> Element {
 
     // Filters: epic → iteration → assignees and areas (each menu counts before its own filter).
     let view = view_prefs(st, ws);
+    // Menus show the selection (`prefs`); filters switched off don't apply (`applied`).
+    let applied = prefs.applied();
     // A saved epic that was closed or moved away no longer filters.
-    let epic_sel = prefs.epic.filter(|e| hierarchy.roots.contains(e));
+    let epic_pick = prefs.epic.filter(|e| hierarchy.roots.contains(e));
+    let epic_sel = epic_pick.filter(|_| !prefs.epic_off);
     let base = filters::kanban_cards(ws, &hierarchy, b, epic_sel, view.iteration.as_deref());
     let visible: HashSet<CardId> = base
         .iter()
-        .filter(|c| filters::matches_board(c, &prefs, me.as_ref()))
+        .filter(|c| filters::matches_board(c, &applied, me.as_ref()))
         .map(|c| c.id)
         .collect();
     let kanban_style = st.settings.read().appearance.kanban.clone();
@@ -167,13 +171,13 @@ pub fn Kanban(board: String) -> Element {
     let in_areas: Vec<&Card> = base
         .iter()
         .copied()
-        .filter(|c| filters::matches_areas(c, &prefs.areas))
+        .filter(|c| filters::matches_areas(c, &applied.areas))
         .collect();
     let assignee_opts = assignee_options(&in_areas, me.as_ref());
     let of_assignees: Vec<&Card> = base
         .iter()
         .copied()
-        .filter(|c| filters::matches_assignees(c, &prefs.assignees, me.as_ref()))
+        .filter(|c| filters::matches_assignees(c, &applied.assignees, me.as_ref()))
         .collect();
     let area_opts = area_options(&of_assignees, &prefs.areas);
     let on_board: Vec<&Card> = ws.cards.values().filter(|c| b.shows(c)).collect();
@@ -226,7 +230,7 @@ pub fn Kanban(board: String) -> Element {
         .collect();
     // The WIP meter counts only the cards shown (like ADO), so it only means something when
     // they are one person's: filtered to one person, or every shown card is the same assignee's.
-    let wip_on = filters::filtered_to_one_person(&prefs)
+    let wip_on = filters::filtered_to_one_person(&applied)
         || filters::single_assignee(visible.iter().filter_map(|id| ws.cards.get(id))).is_some();
     // "New" per column: the column's state for the board's default type, preset in the dialog.
     // None for the done column (dropping there closes) and columns that don't map the type.
@@ -261,7 +265,11 @@ pub fn Kanban(board: String) -> Element {
     drop(ws_guard);
 
     let hidden_n = hidden.len();
-    let filtering = epic_sel.is_some() || !prefs.assignees.is_empty() || !prefs.areas.is_empty();
+    let filtering = epic_pick.is_some() || !prefs.assignees.is_empty() || !prefs.areas.is_empty();
+    let (epic_off, assignees_off, areas_off) =
+        (prefs.epic_off, prefs.assignees_off, prefs.areas_off);
+    // Room for the checkbox before the "Epic" label once an epic is picked.
+    let epic_pad = if epic_pick.is_some() { 76 } else { 52 };
     let save = {
         let (project, team, board) = (project.clone(), team.clone(), board.clone());
         move |f: Box<dyn FnOnce(&mut kanban_core::BoardPrefs)>| {
@@ -272,12 +280,28 @@ pub fn Kanban(board: String) -> Element {
         div { class: "toolbar",
             {switcher}
             // The label sits inside the picker, like the iteration picker's icon.
-            span { class: "select-wrap",
+            span { class: if epic_pick.is_some() && epic_off { "select-wrap has-toggle paused" } else if epic_pick.is_some() { "select-wrap has-toggle" } else { "select-wrap" },
+                if epic_pick.is_some() {
+                    input {
+                        class: "filter-toggle",
+                        r#type: "checkbox",
+                        checked: !epic_off,
+                        aria_label: "Apply the Epic filter",
+                        "data-tip": if epic_off { "Filter off: click to apply it again" } else { "Switch the filter off, keeping the epic" },
+                        onchange: {
+                            let save = save.clone();
+                            move |e: FormEvent| {
+                                let off = !e.checked();
+                                save(Box::new(move |p| p.epic_off = off))
+                            }
+                        },
+                    }
+                }
                 span { class: "lead text", aria_hidden: "true", "Epic" }
                 select {
                         class: "field",
                         aria_label: "Epic",
-                        style: "min-width: 220px; max-width: 360px; padding-left: 52px",
+                        style: "min-width: 220px; max-width: 360px; padding-left: {epic_pad}px",
                         onchange: {
                             let save = save.clone();
                             move |e: FormEvent| {
@@ -285,9 +309,9 @@ pub fn Kanban(board: String) -> Element {
                                 save(Box::new(move |p| p.epic = epic))
                             }
                         },
-                        option { value: "", selected: epic_sel.is_none(), "All epics" }
+                        option { value: "", selected: epic_pick.is_none(), "All epics" }
                         for (id, title) in epic_options {
-                            option { key: "{id}", value: "{id}", selected: epic_sel == Some(id), "{id}  {title}" }
+                            option { key: "{id}", value: "{id}", selected: epic_pick == Some(id), "{id}  {title}" }
                         }
                     }
                     span { class: "chev", Icon { svg: icons::CHEVRON_DOWN } }
@@ -300,6 +324,11 @@ pub fn Kanban(board: String) -> Element {
                     let save = save.clone();
                     move |v: Vec<String>| save(Box::new(move |p| p.assignees = v))
                 },
+                off: assignees_off,
+                on_toggle: {
+                    let save = save.clone();
+                    move |on: bool| save(Box::new(move |p| p.assignees_off = !on))
+                },
             }
             FilterMenu {
                 label: "Area",
@@ -308,6 +337,11 @@ pub fn Kanban(board: String) -> Element {
                 on_change: {
                     let save = save.clone();
                     move |v: Vec<String>| save(Box::new(move |p| p.areas = v))
+                },
+                off: areas_off,
+                on_toggle: {
+                    let save = save.clone();
+                    move |on: bool| save(Box::new(move |p| p.areas_off = !on))
                 },
             }
             if filtering {
@@ -320,6 +354,9 @@ pub fn Kanban(board: String) -> Element {
                             p.epic = None;
                             p.assignees.clear();
                             p.areas.clear();
+                            p.epic_off = false;
+                            p.assignees_off = false;
+                            p.areas_off = false;
                         }))
                     },
                     Icon { svg: icons::CLOSE }

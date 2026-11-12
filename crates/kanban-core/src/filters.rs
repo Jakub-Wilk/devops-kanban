@@ -56,7 +56,38 @@ pub fn matches_states(state: &str, states: &[String]) -> bool {
     states.is_empty() || states.iter().any(|s| s == state)
 }
 
+/// `items`, or none while `off`.
+fn unless_off<T: Clone>(items: &[T], off: bool) -> Vec<T> {
+    if off { Vec::new() } else { items.to_vec() }
+}
+
+impl BoardPrefs {
+    /// The preferences to apply: the filters switched off cleared (and no longer marked off).
+    pub fn applied(&self) -> BoardPrefs {
+        BoardPrefs {
+            epic: self.epic.filter(|_| !self.epic_off),
+            assignees: unless_off(&self.assignees, self.assignees_off),
+            areas: unless_off(&self.areas, self.areas_off),
+            epic_off: false,
+            assignees_off: false,
+            areas_off: false,
+            ..self.clone()
+        }
+    }
+}
+
 impl TabFilters {
+    /// The filters to apply: those switched off cleared (and no longer marked off).
+    pub fn applied(&self) -> TabFilters {
+        TabFilters {
+            epic_states: unless_off(&self.epic_states, self.epic_states_off),
+            assignees: unless_off(&self.assignees, self.assignees_off),
+            areas: unless_off(&self.areas, self.areas_off),
+            item_states: unless_off(&self.item_states, self.item_states_off),
+            ..TabFilters::default()
+        }
+    }
+
     /// An assignee, area or work item state filter is set (iteration and epic states aside).
     pub fn filters_items(&self) -> bool {
         !self.assignees.is_empty() || !self.areas.is_empty() || !self.item_states.is_empty()
@@ -715,5 +746,42 @@ mod tests {
         assert!(!TabFilters::default().matches_item(&card(None, "P\\S1"), Some("P\\S2"), None));
         assert!(matches_states("Active", &[]));
         assert!(!TabFilters::default().is_filtering());
+    }
+
+    #[test]
+    fn filters_switched_off_keep_their_selection() {
+        let prefs = TabFilters {
+            assignees: vec![ME.into()],
+            areas: vec!["P\\A".into()],
+            assignees_off: true,
+            ..TabFilters::default()
+        };
+        assert!(prefs.is_filtering());
+        let applied = prefs.applied();
+        assert!(applied.assignees.is_empty());
+        assert_eq!(applied.areas, prefs.areas);
+        assert!(
+            !TabFilters {
+                areas_off: true,
+                ..applied
+            }
+            .applied()
+            .is_filtering()
+        );
+
+        let board = BoardPrefs {
+            epic: Some(1),
+            assignees: vec![ME.into()],
+            areas: vec!["P\\A".into()],
+            hidden_columns: vec!["Closed".into()],
+            epic_off: true,
+            areas_off: true,
+            ..BoardPrefs::default()
+        };
+        let applied = board.applied();
+        assert_eq!(applied.epic, None);
+        assert_eq!(applied.assignees, board.assignees);
+        assert!(applied.areas.is_empty());
+        assert_eq!(applied.hidden_columns, board.hidden_columns);
     }
 }

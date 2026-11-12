@@ -88,8 +88,14 @@ pub fn Board(project: String, team: String, board: String) -> Element {
             // Same filters as the tabs (the List count ignores the search box).
             let hierarchy = ws.hierarchy();
             let iteration = prefs.iteration.as_deref();
-            let list = filters::epic_rows(ws, &hierarchy, &prefs.list, iteration, |_| true).len();
-            let board_prefs = st.settings.read().board_prefs(&project, &team, &board);
+            let list =
+                filters::epic_rows(ws, &hierarchy, &prefs.list.applied(), iteration, |_| true)
+                    .len();
+            let board_prefs = st
+                .settings
+                .read()
+                .board_prefs(&project, &team, &board)
+                .applied();
             let epic = board_prefs.epic.filter(|e| hierarchy.roots.contains(e));
             let kanban = ws.boards.get(&board).map_or(0, |b| {
                 filters::kanban_cards(ws, &hierarchy, b, epic, iteration)
@@ -98,7 +104,7 @@ pub fn Board(project: String, team: String, board: String) -> Element {
                     .count()
             });
             let timeline =
-                filters::timeline_items(ws, &hierarchy, &prefs.timeline, iteration).len();
+                filters::timeline_items(ws, &hierarchy, &prefs.timeline.applied(), iteration).len();
             (
                 Some((list, kanban, timeline)),
                 ws.iterations.clone(),

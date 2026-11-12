@@ -1,5 +1,5 @@
 //! The filter bar: `FilterMenu` (a button opening a checkbox popover, also used for the kanban
-//! Columns menu), `ItemFilters` (epic status, assignee, area and work item status, for the List and the
+//! Columns menu; a filter's own checkbox switches it off without losing the selection), `ItemFilters` (epic status, assignee, area and work item status, for the List and the
 //! Timeline, each with its own selection) and helpers that read and save the team's [`ViewPrefs`].
 
 use dioxus::prelude::*;
@@ -143,7 +143,9 @@ pub fn state_options(states: &[String], cards: &[&Card]) -> Vec<FilterOption> {
 }
 
 /// A button summarising the selection (`Label`, `Label: Me`, `Label: Me +2`) that opens a
-/// checkbox popover. With `plain`, the button shows only the label and `badge`.
+/// checkbox popover. With `plain`, the button shows only the label and `badge`. With `on_toggle`,
+/// a set filter gets a checkbox in its button that switches it on and off (`off`), keeping the
+/// selection.
 #[component]
 pub fn FilterMenu(
     label: String,
@@ -152,6 +154,8 @@ pub fn FilterMenu(
     on_change: EventHandler<Vec<String>>,
     #[props(default)] icon: Option<&'static str>,
     #[props(default)] plain: bool,
+    #[props(default)] off: bool,
+    #[props(default)] on_toggle: Option<EventHandler<bool>>,
     #[props(default)] badge: Option<usize>,
     #[props(default)] align_right: bool,
     #[props(default = "Clear".to_owned())] reset_label: String,
@@ -159,6 +163,13 @@ pub fn FilterMenu(
 ) -> Element {
     let mut open = use_signal(|| false);
     let active = !plain && !selected.is_empty();
+    let toggle = on_toggle.filter(|_| active);
+    let class = match (active, off, toggle.is_some()) {
+        (false, ..) => "ghost filter",
+        (true, true, _) => "ghost filter has-toggle paused",
+        (true, false, true) => "ghost filter has-toggle on",
+        (true, false, false) => "ghost filter on",
+    };
     let names: Vec<&str> = options
         .iter()
         .filter(|o| selected.contains(&o.value))
@@ -177,8 +188,18 @@ pub fn FilterMenu(
     };
     rsx! {
         div { class: "popover-anchor",
+            if let Some(toggle) = toggle {
+                input {
+                    class: "filter-toggle",
+                    r#type: "checkbox",
+                    checked: !off,
+                    aria_label: "Apply the {label} filter",
+                    "data-tip": if off { "Filter off: click to apply it again" } else { "Switch the filter off, keeping its selection" },
+                    onchange: move |e: FormEvent| toggle.call(e.checked()),
+                }
+            }
             button {
-                class: if active { "ghost filter on" } else { "ghost filter" },
+                class,
                 r#type: "button",
                 aria_expanded: "{open}",
                 aria_haspopup: "dialog",
@@ -240,7 +261,8 @@ pub fn FilterMenu(
     }
 }
 
-/// Epic status, Assigned to, Area and Status menus plus "Clear filters", for the List or Timeline.
+/// Epic status, Assigned to, Area and Status menus (each can be switched off) plus "Clear filters",
+/// for the List or Timeline.
 #[component]
 pub fn ItemFilters(tab: ItemTab) -> Element {
     let st = use_app();
@@ -267,10 +289,11 @@ pub fn ItemFilters(tab: ItemTab) -> Element {
         .collect();
     let epic_opts = state_options(&epic_states, &epics);
 
-    // Counts (of work items) per menu ignore that menu's own selection.
+    // Counts (of work items) per menu ignore that menu's own selection and switched-off filters.
+    let applied = prefs.applied();
     let without_assignees = TabFilters {
         assignees: Vec::new(),
-        ..prefs.clone()
+        ..applied.clone()
     };
     let assignee_opts = assignee_options(
         &filters::timeline_items(ws, &hierarchy, &without_assignees, iteration),
@@ -278,7 +301,7 @@ pub fn ItemFilters(tab: ItemTab) -> Element {
     );
     let without_areas = TabFilters {
         areas: Vec::new(),
-        ..prefs.clone()
+        ..applied.clone()
     };
     let mut area_pool = filters::timeline_items(ws, &hierarchy, &without_areas, iteration);
     if tab == ItemTab::List {
@@ -288,7 +311,7 @@ pub fn ItemFilters(tab: ItemTab) -> Element {
     let area_opts = area_options(&area_pool, &prefs.areas);
     let without_states = TabFilters {
         item_states: Vec::new(),
-        ..prefs.clone()
+        ..applied.clone()
     };
     let item_states = filters::kanban_states(ws, &st.settings.read());
     let state_opts = state_options(
@@ -310,6 +333,11 @@ pub fn ItemFilters(tab: ItemTab) -> Element {
                 let save = save.clone();
                 move |v: Vec<String>| save(Box::new(move |p| p.epic_states = v))
             },
+            off: prefs.epic_states_off,
+            on_toggle: {
+                let save = save.clone();
+                move |on: bool| save(Box::new(move |p| p.epic_states_off = !on))
+            },
         }
         FilterMenu {
             label: "Assigned to",
@@ -318,6 +346,11 @@ pub fn ItemFilters(tab: ItemTab) -> Element {
             on_change: {
                 let save = save.clone();
                 move |v: Vec<String>| save(Box::new(move |p| p.assignees = v))
+            },
+            off: prefs.assignees_off,
+            on_toggle: {
+                let save = save.clone();
+                move |on: bool| save(Box::new(move |p| p.assignees_off = !on))
             },
         }
         FilterMenu {
@@ -328,6 +361,11 @@ pub fn ItemFilters(tab: ItemTab) -> Element {
                 let save = save.clone();
                 move |v: Vec<String>| save(Box::new(move |p| p.areas = v))
             },
+            off: prefs.areas_off,
+            on_toggle: {
+                let save = save.clone();
+                move |on: bool| save(Box::new(move |p| p.areas_off = !on))
+            },
         }
         FilterMenu {
             label: "Status",
@@ -336,6 +374,11 @@ pub fn ItemFilters(tab: ItemTab) -> Element {
             on_change: {
                 let save = save.clone();
                 move |v: Vec<String>| save(Box::new(move |p| p.item_states = v))
+            },
+            off: prefs.item_states_off,
+            on_toggle: {
+                let save = save.clone();
+                move |on: bool| save(Box::new(move |p| p.item_states_off = !on))
             },
         }
         if prefs.is_filtering() {

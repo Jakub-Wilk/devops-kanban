@@ -171,6 +171,10 @@ pub struct BoardPrefs {
     pub areas: Vec<String>,
     /// Cards pinned open at the top of their column (`appearance.kanban.hover_open`).
     pub pinned: Vec<u32>,
+    /// Filters switched off: kept, but not applied (see [`BoardPrefs::applied`]).
+    pub epic_off: bool,
+    pub assignees_off: bool,
+    pub areas_off: bool,
 }
 
 /// Filters of one team's board screen. The search box is not saved.
@@ -215,7 +219,8 @@ impl ListSort {
     }
 }
 
-/// The filter bar of the List or the Timeline. Empty lists mean "no filter".
+/// The filter bar of the List or the Timeline. Empty lists mean "no filter". Each `*_off` switches
+/// its filter off without losing the selection (see [`TabFilters::applied`]).
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct TabFilters {
@@ -225,6 +230,10 @@ pub struct TabFilters {
     /// Area paths; each also matches the areas below it.
     pub areas: Vec<String>,
     pub item_states: Vec<String>,
+    pub epic_states_off: bool,
+    pub assignees_off: bool,
+    pub areas_off: bool,
+    pub item_states_off: bool,
 }
 
 impl Settings {
@@ -522,6 +531,8 @@ mod tests {
                 assignees: vec!["@me".into()],
                 areas: vec!["IT Finance\\Penny".into()],
                 pinned: vec![117349],
+                assignees_off: true,
+                ..BoardPrefs::default()
             },
         );
         let back = Settings::from_toml(&s.to_toml().unwrap()).unwrap();
@@ -562,6 +573,8 @@ mod tests {
                 assignees: vec!["@me".into(), "@unassigned".into()],
                 areas: vec!["IT Finance\\Rozwój".into()],
                 item_states: vec!["Blocked".into()],
+                areas_off: true,
+                ..TabFilters::default()
             },
             timeline: TabFilters {
                 assignees: vec!["@me".into()],

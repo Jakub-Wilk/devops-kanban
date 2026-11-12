@@ -103,7 +103,7 @@ fn derive(st: crate::state::AppState, ws: &Workspace) -> TlData {
     let shown = kanban_core::filters::timeline_items(
         ws,
         &hierarchy,
-        &view.timeline,
+        &view.timeline.applied(),
         view.iteration.as_deref(),
     );
     let tasks: Vec<&Card> = shown

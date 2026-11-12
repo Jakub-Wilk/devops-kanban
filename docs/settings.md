@@ -79,6 +79,7 @@ them on the kanban. Delete a table to reset that board.
 |------------------|----------|---------|---------|
 | `hidden_columns` | string[] | `[]`    | Column names hidden on that board (from the *Columns* menu) |
 | `pinned`         | int[]    | `[]`    | Cards pinned open at the top of their column (with `appearance.kanban.hover_open`) |
+| `epic_off`, `assignees_off`, `areas_off` | bool | `false` | That filter is switched off (its checkbox): the selection is kept but not applied |
 | `epic`           | int?     | none    | Epic the kanban is filtered to (from the *Epic* picker) |
 | `assignees`      | string[] | `[]`    | Kanban *Assigned to* filter: `@me`, `@unassigned` or a `uniqueName` |
 | `areas`          | string[] | `[]`    | Kanban *Area* filter: area paths, each including the areas below it |
@@ -105,6 +106,7 @@ search box is not saved. Empty lists mean "no filter".
 | `<tab>.assignees`       | string[] | `[]`    | `@me`, `@unassigned` or a `uniqueName` |
 | `<tab>.areas`           | string[] | `[]`    | Area paths, each including the areas below it |
 | `<tab>.item_states`     | string[] | `[]`    | Work item statuses shown. Offered: the statuses of the kanban columns that aren't hidden |
+| `<tab>.<filter>_off`    | bool     | `false` | `epic_states_off`, `assignees_off`, `areas_off`, `item_states_off`: that filter is switched off (its checkbox); the selection is kept but not applied |
 
 ```toml
 [views."IT Finance/IT Finance Team"]

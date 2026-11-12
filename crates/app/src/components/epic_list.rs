@@ -75,10 +75,11 @@ pub fn EpicList(search_focus: Signal<Option<std::rc::Rc<MountedData>>>) -> Eleme
     let matches_text = |c: &Card| {
         q.is_empty() || c.title.to_lowercase().contains(&q) || c.id.to_string().contains(&q)
     };
+    let applied = view.list.applied();
     let rows = filters::list_rows(
         ws,
         &hierarchy,
-        &view.list,
+        &applied,
         view.iteration.as_deref(),
         matches_text,
     );
@@ -107,8 +108,7 @@ pub fn EpicList(search_focus: Signal<Option<std::rc::Rc<MountedData>>>) -> Eleme
     let data = row_data(ws, &hierarchy, &rows, &level_defaults);
     let roots_shown = rows.iter().filter(|r| r.depth == 0 && !r.orphan).count();
     let orphans_shown = rows.iter().filter(|r| r.depth == 0 && r.orphan).count();
-    let roots_hidden = view
-        .list
+    let roots_hidden = applied
         .is_filtering()
         .then(|| hierarchy.roots.len().saturating_sub(roots_shown))
         .filter(|n| *n > 0);
