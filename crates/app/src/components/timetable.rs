@@ -1120,7 +1120,7 @@ fn QuickLog(
     };
     rsx! {
         div {
-            class: if flip { "tt-pop flip" } else { "tt-pop" },
+            class: if flip { "tt-pop log flip" } else { "tt-pop log" },
             style: "top: {top}px",
             role: "dialog",
             aria_label: "Log {format_duration(secs)}",

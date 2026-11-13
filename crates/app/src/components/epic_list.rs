@@ -290,6 +290,9 @@ fn ListRowView(
     let parent = row.parent;
     let card = d.card.clone();
     let root = row.depth == 0;
+    // A parentless item is at depth 0 too, but it isn't an epic: its dialog keeps the Parent
+    // field so one can be picked.
+    let epic = root && !row.orphan;
     let dragging = *st.drag.read() == Some(Drag::Row { id, parent });
     let droppable =
         matches!(*st.drag.read(), Some(Drag::Row { id: x, parent: p }) if p == parent && x != id);
@@ -388,7 +391,7 @@ fn ListRowView(
                     class: "{title_class}",
                     r#type: "button",
                     aria_label: "Edit {card.title}",
-                    onclick: move |_| open_edit(st, &edit, root),
+                    onclick: move |_| open_edit(st, &edit, epic),
                     "{card.title}"
                 }
                 if row.has_children && !open {
